@@ -3,6 +3,8 @@
 import { useActionState, useState } from "react"
 import { updateTroopSettings } from "@/app/actions"
 import { Button } from "@/components/ui/button"
+import { toast } from "sonner"
+import { useEffect } from "react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -12,6 +14,15 @@ import { cn } from "@/lib/utils"
 export function TroopSettingsForm({ initialData, slug, className }: { initialData?: any, slug: string, className?: string }) {
     const [state, dispatch, isPending] = useActionState(updateTroopSettings, undefined)
 
+
+    
+    useEffect(() => {
+        if (state?.error) {
+            toast.error("Error", { description: state.error })
+        } else if (state?.success) {
+            toast.success("Success", { description: state.message || "Settings saved" })
+        }
+    }, [state])
 
     return (
         <Card className={cn(className)}>

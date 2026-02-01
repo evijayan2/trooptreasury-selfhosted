@@ -941,12 +941,11 @@ export async function updateTroopSettings(prevState: any, formData: FormData) {
         revalidatePath(`/dashboard`)
         revalidatePath(`/dashboard/settings`)
         revalidatePath(`/dashboard/finance/dues`)
+        return { success: true, message: "Settings saved successfully" }
     } catch (error) {
         console.error("Troop Settings Error:", error)
         return { error: "Failed to save settings" }
     }
-
-    redirect(`/dashboard/settings`)
 }
 
 export async function updateRolePermissions(prevState: any, formData: FormData) {
