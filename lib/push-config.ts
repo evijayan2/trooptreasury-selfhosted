@@ -1,0 +1,1 @@
+export const NEXT_PUBLIC_VAPID_PUBLIC_KEY = "BKNJVcjdGohbzbIW0SeHdc900vufJXiKdoqz1cWe_lTCWLZOGjXqWUuWXsDrXECk7h6VbmwKwDp_jfer8lU-nxs"

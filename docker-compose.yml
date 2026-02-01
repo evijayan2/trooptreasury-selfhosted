@@ -1,0 +1,31 @@
+services:
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: ${POSTGRES_DB:-trooptreasury}
+    volumes:
+      - tt_db_data:/var/lib/postgresql/data
+
+  app:
+    image: ${DOCKER_IMAGE:-trooptreasury:latest}
+    restart: always
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@db:5432/${POSTGRES_DB:-trooptreasury}?schema=public&sslmode=disable
+      AUTH_SECRET: ${AUTH_SECRET:-replace-me-with-a-random-string}
+      NEXT_PUBLIC_APP_URL: ${APP_URL:-http://localhost:3000} #Used to generate invitation links (e.g. in emails). If this is wrong, invite links will point to the wrong place.
+      AUTH_TRUST_HOST: "true"
+      AUTH_URL: ${APP_URL:-http://localhost:3000}  #  Used by the authentication system to know the site's canonical URL
+      RESEND_API_KEY: "re-your-api-key"
+      TROOP_NAME: ${TROOP_NAME:-Troop 79}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-TroopTreasury2026!}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - db
+
+volumes:
+  tt_db_data:

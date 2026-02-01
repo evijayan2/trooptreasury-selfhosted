@@ -1,0 +1,476 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Troop {
+  id            String      @id @default(uuid())
+  name          String
+  slug          String      @unique
+  council       String?
+  district      String?
+  settings      Json? // Migrated from TroopSettings
+  status        TroopStatus @default(ACTIVE)
+  deactivatedAt DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  members              TroopMember[]
+  subscription         Subscription?
+  scouts               Scout[]
+  campouts             Campout[]
+  budgets              Budget[]
+  fundraisingCampaigns FundraisingCampaign[]
+  transactions         Transaction[]
+}
+
+model Subscription {
+  id                   String   @id @default(uuid())
+  troopId              String   @unique
+  planId               String // e.g. "price_H5ggY..."
+  status               String // ACTIVE, PAST_DUE, CANCELED, INCOMPLETE
+  stripeCustomerId     String   @unique
+  stripeSubscriptionId String?  @unique
+  currentPeriodEnd     DateTime
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  // Subscription Lifecycle & Features
+  cancelAtPeriodEnd Boolean   @default(false)
+  canceledAt        DateTime?
+  trialStart        DateTime?
+  trialEnd          DateTime?
+  pausedAt          DateTime?
+  isPaused          Boolean   @default(false)
+  discountCode      String?
+  discountEnd       DateTime?
+
+  troop Troop @relation(fields: [troopId], references: [id], onDelete: Cascade)
+}
+
+model PendingRegistration {
+  id                String   @id @default(uuid())
+  email             String   @unique
+  name              String
+  troopName         String
+  troopSlug         String
+  council           String
+  district          String?
+  passwordHash      String
+  expiresAt         DateTime
+  createdAt         DateTime @default(now())
+  stripeSessionId   String?  @unique
+}
+
+model TroopMember {
+  id        String   @id @default(uuid())
+  troopId   String
+  userId    String
+  role      Role     @default(SCOUT)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  troop Troop @relation(fields: [troopId], references: [id])
+  user  User  @relation(fields: [userId], references: [id])
+
+  @@unique([troopId, userId])
+}
+
+model User {
+  id                   String         @id @default(uuid())
+  email                String         @unique
+  name                 String?
+  passwordHash         String?
+  role                 Role           @default(SCOUT) // Now used for PLATFORM_ADMIN (global) vs others (troop-scoped)
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+  isActive             Boolean        @default(true)
+  deactivatedAt        DateTime?
+  invitationToken      String?        @unique
+  invitationExpires    DateTime?
+  failedLoginAttempts  Int            @default(0)
+  lockedUntil          DateTime?
+  lastFailedLogin      DateTime?
+  adultExpenses        AdultExpense[]
+  campouts             CampoutAdult[] @relation("CampoutAdults")
+  parentLinks          ParentScout[]  @relation("Parent")
+  scout                Scout?
+  approvedTransactions Transaction[]  @relation("ApprovedBy")
+  transactions         Transaction[]  @relation("UserTransactions")
+  preferredTheme       String?        @default("system")
+  preferredColor       String?        @default("orange")
+  pushToken            String?
+  notifications        Notification[]
+
+  troopMemberships TroopMember[]
+  
+  // Admin Notification Preferences
+  adminEmailAlerts Boolean         @default(true)
+  adminSmsAlerts   Boolean         @default(false)
+  adminAlertTypes  Json?
+  
+  auditLogs        AdminAuditLog[]
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  type      NotificationType @default(INFO)
+  title     String
+  message   String
+  link      String?
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum NotificationType {
+  SYSTEM
+  ALERT
+  INFO
+  ACTION_REQUIRED
+}
+
+model Scout {
+  id           String                 @id @default(uuid())
+  troopId      String
+  name         String
+  age          Int?
+  ibaBalance   Decimal                @default(0.00) @db.Decimal(10, 2)
+  status       ScoutStatus            @default(ACTIVE)
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+  userId       String?                @unique
+  campouts     CampoutScout[]
+  parentLinks  ParentScout[]
+  user         User?                  @relation(fields: [userId], references: [id])
+  transactions Transaction[]
+  sales        FundraisingSale[]
+  orders       FundraisingOrder[]
+  email        String?                @unique
+  volunteering FundraisingVolunteer[]
+
+  troop Troop @relation(fields: [troopId], references: [id])
+}
+
+model ParentScout {
+  parentId String
+  scoutId  String
+  parent   User   @relation("Parent", fields: [parentId], references: [id])
+  scout    Scout  @relation(fields: [scoutId], references: [id])
+
+  @@id([parentId, scoutId])
+}
+
+model CampoutScout {
+  campoutId    String
+  scoutId      String
+  registeredAt DateTime @default(now())
+  campout      Campout  @relation(fields: [campoutId], references: [id])
+  scout        Scout    @relation(fields: [scoutId], references: [id])
+
+  @@id([campoutId, scoutId])
+}
+
+model Campout {
+  id            String         @id @default(uuid())
+  troopId       String
+  name          String
+  startDate     DateTime
+  endDate       DateTime?
+  location      String?
+  estimatedCost Decimal?       @db.Decimal(10, 2)
+  status        CampoutStatus  @default(DRAFT)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  expenses      AdultExpense[]
+  adults        CampoutAdult[]
+  scouts        CampoutScout[]
+  transactions  Transaction[]
+
+  troop Troop @relation(fields: [troopId], references: [id])
+}
+
+model CampoutAdult {
+  campoutId String
+  adultId   String
+  role      CampoutAdultRole @default(ORGANIZER)
+  adult     User             @relation("CampoutAdults", fields: [adultId], references: [id])
+  campout   Campout          @relation(fields: [campoutId], references: [id])
+
+  @@id([campoutId, adultId, role])
+}
+
+model Transaction {
+  id                    String               @id @default(uuid())
+  troopId               String
+  type                  TransactionType
+  amount                Decimal              @db.Decimal(10, 2)
+  description           String?
+  fromAccount           String?
+  toAccount             String?
+  scoutId               String?
+  userId                String?
+  campoutId             String?
+  approvedBy            String?
+  status                TransactionStatus    @default(PENDING)
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  budgetCategoryId      String?
+  fundraisingCampaignId String?
+  approvedByUser        User?                @relation("ApprovedBy", fields: [approvedBy], references: [id])
+  budgetCategory        BudgetCategory?      @relation(fields: [budgetCategoryId], references: [id])
+  campout               Campout?             @relation(fields: [campoutId], references: [id])
+  fundraisingCampaign   FundraisingCampaign? @relation(fields: [fundraisingCampaignId], references: [id])
+  scout                 Scout?               @relation(fields: [scoutId], references: [id])
+  user                  User?                @relation("UserTransactions", fields: [userId], references: [id])
+  troop                 Troop                @relation(fields: [troopId], references: [id])
+}
+
+model AdultExpense {
+  id           String   @id @default(uuid())
+  campoutId    String
+  adultId      String
+  amount       Decimal  @db.Decimal(10, 2)
+  description  String
+  category     String?
+  createdAt    DateTime @default(now())
+  isReimbursed Boolean  @default(false)
+  adult        User     @relation(fields: [adultId], references: [id])
+  campout      Campout  @relation(fields: [campoutId], references: [id])
+}
+
+// Deprecated: Merged into Troop settings
+model TroopSettings {
+  id                    String   @id @default(uuid())
+  name                  String   @default("TroopTreasury")
+  council               String?
+  district              String?
+  address               String?
+  rolePermissions       Json?
+  sessionTimeoutMinutes Int      @default(15)
+  updatedAt             DateTime @updatedAt
+}
+
+model Budget {
+  id               String           @id @default(uuid())
+  troopId          String
+  year             String
+  status           BudgetStatus     @default(DRAFT)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  annualDuesAmount Decimal          @default(150.00) @db.Decimal(10, 2)
+  categories       BudgetCategory[]
+
+  troop Troop @relation(fields: [troopId], references: [id])
+}
+
+model BudgetCategory {
+  id             String             @id @default(uuid())
+  budgetId       String
+  name           String
+  type           BudgetCategoryType
+  plannedIncome  Decimal            @default(0) @db.Decimal(10, 2)
+  plannedExpense Decimal            @default(0) @db.Decimal(10, 2)
+  budget         Budget             @relation(fields: [budgetId], references: [id])
+  transactions   Transaction[]
+}
+
+model FundraisingCampaign {
+  id                   String            @id @default(uuid())
+  troopId              String
+  name                 String
+  startDate            DateTime
+  endDate              DateTime?
+  goal                 Decimal           @db.Decimal(10, 2)
+  isComplianceApproved Boolean           @default(false)
+  ibaPercentage        Int               @default(0) // Used for simple % campaigns
+  status               FundraisingStatus @default(DRAFT)
+  transactions         Transaction[]
+  type                 FundraisingType   @default(GENERAL)
+
+  // Products
+  products CampaignProduct[]
+
+  // Shotgun / Event Fields
+  description         String?
+  ticketPrice         Decimal? @db.Decimal(10, 2)
+  volunteerPercentage Decimal? @default(0) @db.Decimal(5, 2) // e.g. 5.00 for 5%
+
+  // Notification Settings
+  sendThankYou     Boolean @default(false)
+  thankYouTemplate String?
+  sendEventInvite  Boolean @default(false)
+
+  sales      FundraisingSale[]
+  orders     FundraisingOrder[]
+  volunteers FundraisingVolunteer[]
+
+  troop Troop @relation(fields: [troopId], references: [id])
+}
+
+model CampaignProduct {
+  id         String   @id @default(uuid())
+  campaignId String
+  name       String
+  price      Decimal  @db.Decimal(10, 2)
+  cost       Decimal  @db.Decimal(10, 2)
+  ibaAmount  Decimal  @db.Decimal(10, 2)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  campaign FundraisingCampaign @relation(fields: [campaignId], references: [id])
+  orders   FundraisingOrder[]
+
+  @@index([campaignId])
+}
+
+model FundraisingVolunteer {
+  id         String              @id @default(uuid())
+  campaignId String
+  scoutId    String
+  campaign   FundraisingCampaign @relation(fields: [campaignId], references: [id])
+  scout      Scout               @relation(fields: [scoutId], references: [id])
+  createdAt  DateTime            @default(now())
+
+  @@unique([campaignId, scoutId])
+}
+
+model FundraisingOrder {
+  id            String   @id @default(uuid())
+  campaignId    String
+  scoutId       String
+  productId     String?
+  customerName  String
+  customerEmail String?
+  quantity      Int
+  amountPaid    Decimal  @default(0) @db.Decimal(10, 2)
+  delivered     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  campaign FundraisingCampaign @relation(fields: [campaignId], references: [id])
+  scout    Scout               @relation(fields: [scoutId], references: [id])
+  product  CampaignProduct?    @relation(fields: [productId], references: [id])
+}
+
+model FundraisingSale {
+  id         String   @id @default(uuid())
+  campaignId String
+  scoutId    String
+  quantity   Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  campaign FundraisingCampaign @relation(fields: [campaignId], references: [id])
+  scout    Scout               @relation(fields: [scoutId], references: [id])
+
+  @@unique([campaignId, scoutId])
+}
+
+enum FundraisingType {
+  GENERAL
+  PRODUCT_SALE
+}
+
+enum FundraisingStatus {
+  DRAFT
+  ACTIVE
+  CLOSED
+}
+
+enum Role {
+  PLATFORM_ADMIN
+  ADMIN
+  FINANCIER
+  LEADER
+  SCOUT
+  PARENT
+}
+
+enum ScoutStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum CampoutStatus {
+  DRAFT
+  OPEN
+  READY_FOR_PAYMENT
+  CLOSED
+}
+
+enum CampoutAdultRole {
+  ORGANIZER
+  ATTENDEE
+}
+
+enum TransactionType {
+  REGISTRATION_INCOME
+  FUNDRAISING_INCOME
+  DONATION_IN
+  EXPENSE
+  CAMP_TRANSFER
+  REIMBURSEMENT
+  DUES
+  IBA_RECLAIM
+  EVENT_PAYMENT
+  TROOP_PAYMENT
+  IBA_DEPOSIT
+  SCOUT_CASH_TURN_IN
+}
+
+enum TransactionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum BudgetCategoryType {
+  INCOME
+  EXPENSE
+  BOTH
+}
+
+enum BudgetStatus {
+  DRAFT
+  ACTIVE
+  CLOSED
+}
+
+enum TroopStatus {
+  PENDING_PAYMENT // For hosted flow before webhook
+  ACTIVE
+  PAUSED
+  GRACE_PERIOD
+  PENDING_DELETION
+}
+
+model AdminAuditLog {
+  id        String   @id @default(uuid())
+  adminId   String
+  action    String // LOCK_ACCOUNT, FACTORY_RESET, ISSUE_REFUND, etc.
+  targetId  String? // troopId, userId, etc.
+  details   Json? // Additional context
+  createdAt DateTime @default(now())
+
+  admin User @relation(fields: [adminId], references: [id])
+}
+
+model WebhookEvent {
+  id            String    @id @default(uuid())
+  eventType     String // customer.subscription.created, etc.
+  stripeEventId String    @unique
+  payload       Json
+  processed     Boolean   @default(false)
+  error         String?
+  retryCount    Int       @default(0)
+  createdAt     DateTime  @default(now())
+  processedAt   DateTime?
+}
+
+
