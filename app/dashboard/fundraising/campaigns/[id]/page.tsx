@@ -3,9 +3,8 @@ import { prisma } from "@/lib/prisma"
 import { redirect, notFound } from "next/navigation"
 import { CampaignManager } from "@/components/fundraising/campaign-manager"
 
-export default async function CampaignDetailPage({ params }: { params: Promise<{ id: string }> }) {
-    const { id } = await params
-    const slug = "troop-1"
+export default async function CampaignDetailPage({ params }: { params: Promise<any> }) {
+    const { slug, id } = await params
     const session = await auth()
 
     if (!session?.user?.id) redirect("/login")

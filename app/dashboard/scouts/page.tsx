@@ -10,7 +10,7 @@ import { ImportScoutsButton } from "@/components/scouts/ImportScoutsButton"
 
 export const dynamic = 'force-dynamic'
 
-export default async function Page({ }: {}) {
+export default async function Page({ params }: { params: Promise<any> }) {
     const slug = "troop-1"
     const session = await auth()
 

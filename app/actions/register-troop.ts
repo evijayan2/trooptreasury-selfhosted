@@ -17,7 +17,7 @@ const registerSchema = z.object({
     promoCode: z.string().optional(),
 })
 
-import { createCheckoutSession } from "./stripe"
+
 
 export async function registerTroop(data: z.infer<typeof registerSchema>) {
 

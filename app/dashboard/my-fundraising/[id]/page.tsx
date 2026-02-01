@@ -4,9 +4,8 @@ import { notFound, redirect } from "next/navigation"
 import { OrderManager } from "@/components/fundraising/OrderManager"
 import { EventParticipationManager } from "@/components/fundraising/event-participation-manager"
 
-export default async function ScoutCampaignPage({ params }: { params: Promise<{ id: string }> }) {
-    const { id } = await params
-    const slug = "troop-1"
+export default async function ScoutCampaignPage({ params }: { params: Promise<any> }) {
+    const { slug, id } = await params
     const session = await auth()
     if (!session?.user) return <div>Unauthorized</div>
 
@@ -101,7 +100,7 @@ export default async function ScoutCampaignPage({ params }: { params: Promise<{ 
                             ibaAmount: l.product.ibaAmount.toNumber()
                         } : null
                     }))}
-                    slug={slug} />
+                    slug={slug}                />
             </div>
         )
     }

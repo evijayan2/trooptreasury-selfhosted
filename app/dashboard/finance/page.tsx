@@ -7,7 +7,7 @@ import { FinanceCard, TransactionItem } from "@/components/finance/finance-card"
 import { auth } from "@/auth"
 import { notFound, redirect } from "next/navigation"
 
-export default async function FinancePage({ }: {}) {
+export default async function FinancePage({ params }: { params: Promise<any> }) {
     const slug = "troop-1"
     const session = await auth()
     if (!session?.user) redirect("/login")

@@ -12,7 +12,7 @@ import { DeleteBudgetCategoryButton } from "@/components/finance/DeleteBudgetCat
 import { Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
-export default async function BudgetPage({ }: {}) {
+export default async function BudgetPage({ params }: { params: Promise<any> }) {
     const slug = "troop-1"
     const session = await auth()
 

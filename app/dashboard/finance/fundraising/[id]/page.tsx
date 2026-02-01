@@ -4,7 +4,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { ProductSalesTracker } from "@/components/finance/ProductSalesTracker"
 import { Badge } from "@/components/ui/badge"
 
-export default async function CampaignDetailsPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function CampaignDetailsPage({ params }: { params: Promise<any> }) {
     const { id } = await params
     const campaign = await prisma.fundraisingCampaign.findUnique({
         where: { id: id },

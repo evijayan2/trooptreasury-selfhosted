@@ -5,7 +5,7 @@ import { notFound, redirect } from "next/navigation"
 import { UserTable } from "@/components/users/user-table"
 import { UserForm } from "@/components/users/user-form"
 
-export default async function Page({ }: {}) {
+export default async function Page({ params }: { params: Promise<any> }) {
     const slug = "troop-1"
     const session = await auth()
 

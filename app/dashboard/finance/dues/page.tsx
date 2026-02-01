@@ -6,7 +6,7 @@ import { auth } from "@/auth"
 import { redirect } from "next/navigation"
 import { TransactionForm } from "@/components/finance/TransactionForm"
 
-export default async function DuesPage({ }: {}) {
+export default async function DuesPage({ params }: { params: Promise<any> }) {
     const slug = "troop-1"
     const session = await auth()
 

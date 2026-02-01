@@ -20,10 +20,9 @@ import { Badge } from "@/components/ui/badge"
 import { CampoutLifecycleActions } from "@/components/campouts/campout-lifecycle-actions"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
-export default async function Page({ params }: { params: Promise<{ id: string }> }) {
+export default async function Page({ params }: { params: Promise<any> }) {
     // ... existing setup
     const { id } = await params
-    const slug = "troop-1"
     const session = await auth()
 
     if (!session?.user?.id) {
@@ -324,14 +323,14 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
                             {(campout.status === 'DRAFT' || campout.status === 'OPEN') ? (
                                 <CampoutLifecycleActions
                                     campoutId={campout.id}
-                                    slug={slug}
+                                    slug={(await params).slug}
                                     status={campout.status}
                                     campoutName={campout.name}
                                 />
                             ) : (
                                 <PayoutControls
                                     campoutId={campout.id}
-                                    slug={slug}
+                                    slug={(await params).slug}
                                     status={campout.status}
                                     organizers={organizersWithExpenses}
                                 />
@@ -538,13 +537,13 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
                                 <div>
                                     <h4 className="text-sm font-semibold mb-3 text-muted-foreground">Organizers</h4>
                                     <ul className="space-y-2">
-                                        {organizers.map(({ adult: { id, name } }) => {
+                                        {organizers.map(o => {
                                             const canEdit = ["ADMIN", "LEADER", "FINANCIER"].includes(role) && !isClosed
                                             return (
-                                                <li key={id} className="flex justify-between items-center bg-muted/50 p-3 rounded-lg border">
-                                                    <span className="font-medium">{name}</span>
+                                                <li key={o.adult.id} className="flex justify-between items-center bg-muted/50 p-3 rounded-lg border">
+                                                    <span className="font-medium">{o.adult.name}</span>
                                                     {canEdit && campout.status === 'OPEN' && (
-                                                        <RemoveParticipantButton campoutId={campout.id} id={id} type="ADULT" />
+                                                        <RemoveParticipantButton campoutId={campout.id} id={o.adult.id} type="ADULT" />
                                                     )}
                                                 </li>
                                             )

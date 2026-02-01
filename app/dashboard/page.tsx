@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from "next/link"
 import { Tent, DollarSign, Users } from "lucide-react"
 
-export default async function TenantDashboard({ }: {}) {
+export default async function TenantDashboard({ params }: { params: Promise<any> }) {
     const slug = "troop-1"
     const session = await auth()
     if (!session?.user?.id) return null

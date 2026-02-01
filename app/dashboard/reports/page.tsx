@@ -18,10 +18,11 @@ import { notFound, redirect } from "next/navigation"
 export const dynamic = 'force-dynamic'
 
 interface ReportsPageProps {
+    params: Promise<any>
     searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }
 
-export default async function Page({ searchParams }: ReportsPageProps) {
+export default async function Page({ params, searchParams }: ReportsPageProps) {
     const slug = "troop-1"
     const session = await auth()
 

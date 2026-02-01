@@ -4,7 +4,7 @@ import { CreateCampaignForm } from "@/components/fundraising/create-campaign-for
 
 import { prisma } from "@/lib/prisma"
 
-export default async function NewCampaignPage({ }: {}) {
+export default async function NewCampaignPage({ params }: { params: Promise<any> }) {
     const slug = "troop-1"
     const session = await auth()
 

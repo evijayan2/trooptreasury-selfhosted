@@ -11,7 +11,7 @@ import { formatCurrency } from "@/lib/utils"
 
 export const dynamic = 'force-dynamic'
 
-export default async function ExpensesPage({ }: {}) {
+export default async function ExpensesPage({ params }: { params: Promise<any> }) {
     const slug = "troop-1"
     const session = await auth()
 

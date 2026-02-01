@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { notFound, redirect } from "next/navigation"
 import { FundraisingDashboard } from "@/components/fundraising/fundraising-dashboard"
 
-export default async function FundraisingPage({ }: {}) {
+export default async function FundraisingPage({ params }: { params: Promise<any> }) {
     const slug = "troop-1"
     const session = await auth()
 

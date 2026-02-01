@@ -83,53 +83,9 @@ export async function getAdminDashboardStats() {
         prisma.subscription.count({ where: { status: "canceled" } })
     ])
 
-    // Real MRR Calculation
+    
     let mrr = 0
-
-    const isHosted = process.env.NEXT_PUBLIC_IS_HOSTED === "true"
-    if (isHosted) {
-        try {
-            const { getStripe } = require("@/lib/stripe");
-            const stripe = getStripe();
-
-            // Group active/trialing subscriptions by planId
-            const subscriptionGroups = await prisma.subscription.groupBy({
-                by: ['planId'],
-                where: {
-                    status: { in: ['active', 'trialing'] }
-                },
-                _count: {
-                    _all: true
-                }
-            })
-
-            // Calculate total MRR based on current plan prices
-            for (const group of subscriptionGroups) {
-                if (!group.planId) continue
-
-                try {
-                    const price = await stripe.prices.retrieve(group.planId)
-                    if (price.unit_amount) {
-                        // Stripe amount is in cents
-                        const amount = price.unit_amount / 100
-                        const count = group._count._all
-
-                        // Adjust for interval (if yearly, divide by 12 for monthly MRR)
-                        if (price.recurring?.interval === 'year') {
-                            mrr += (amount / 12) * count
-                        } else {
-                            mrr += amount * count
-                        }
-                    }
-                } catch (e) {
-                    console.error(`Failed to fetch price for plan ${group.planId}:`, e)
-                }
-            }
-        } catch (e) {
-            console.log("Stripe interaction skipped in self-hosted mode");
-        }
-    }
-
+    // Stripe disabled in self-hosted
     const recentSignups = await prisma.troop.findMany({
         take: 5,
         orderBy: { createdAt: "desc" },
@@ -204,53 +160,7 @@ export async function unlockTroop(troopId: string) {
 }
 
 export async function manageSubscription(troopId: string, action: 'cancel' | 'pause' | 'resume') {
-    const session = await auth()
-    if (!session?.user?.id || (session.user as any).role !== "PLATFORM_ADMIN") throw new Error("Unauthorized")
-
-    const troop = await prisma.troop.findUnique({
-        where: { id: troopId },
-        include: { subscription: true }
-    })
-
-    if (!troop?.subscription?.stripeSubscriptionId) throw new Error("No active subscription")
-
-    const isHosted = process.env.NEXT_PUBLIC_IS_HOSTED === "true"
-    if (!isHosted) {
-        console.log("Stripe is disabled in self-hosted mode")
-        return
-    }
-
-    const { getStripe } = require("@/lib/stripe");
-    const stripe = getStripe()
-    const subId = troop.subscription.stripeSubscriptionId
-
-    try {
-        if (action === 'cancel') {
-            await stripe.subscriptions.cancel(subId)
-            // Webhook will handle DB update, but we can optimistically update or wait
-        } else if (action === 'pause') {
-            await stripe.subscriptions.update(subId, {
-                pause_collection: { behavior: 'void' } // Indefinite pause
-            })
-        } else if (action === 'resume') {
-            await stripe.subscriptions.update(subId, {
-                pause_collection: null
-            })
-        }
-
-        await prisma.adminAuditLog.create({
-            data: {
-                adminId: session.user.id,
-                action: `SUBSCRIPTION_${action.toUpperCase()}`,
-                targetId: troopId
-            }
-        })
-
-    } catch (e: any) {
-        throw new Error(`Stripe Action Failed: ${e.message}`)
-    }
-
-    revalidatePath("/admin")
+    throw new Error("Subscription management is disabled in self-hosted mode.")
 }
 
 
@@ -350,43 +260,9 @@ export async function getTroops({
         prisma.troop.count({ where })
     ])
 
-    // Enrich troops with MRR data
-    const isHosted = process.env.NEXT_PUBLIC_IS_HOSTED === "true"
-    if (!isHosted) {
-        return { troops: troops.map(t => ({ ...t, mrr: 0 })), total, pages: Math.ceil(total / limit) }
-    }
-
-    const { getStripe } = require("@/lib/stripe");
-    const stripe = getStripe()
-
-    // 1. Collect unique plan IDs
-    const planIds = Array.from(new Set(troops.map(t => t.subscription?.planId).filter(Boolean))) as string[]
-
-    // 2. Fetch prices in parallel
-    const priceMap = new Map<string, number>()
-    await Promise.all(planIds.map(async (planId) => {
-        try {
-            const price = await stripe.prices.retrieve(planId)
-            if (price.unit_amount) {
-                // Calculate monthly equivalent
-                let amount = price.unit_amount / 100
-                if (price.recurring?.interval === 'year') amount /= 12
-                priceMap.set(planId, amount)
-            }
-        } catch (e) {
-            console.error(`Failed to fetch price for ${planId}`, e)
-        }
-    }))
-
-    // 3. Attach MRR to troops
-    const troopsWithMrr = troops.map(troop => {
-        const planId = troop.subscription?.planId
-        const mrr = (planId && (troop.subscription?.status === 'active' || troop.subscription?.status === 'trialing'))
-            ? priceMap.get(planId) || 0
-            : 0
-        return { ...troop, mrr }
-    })
-
+    
+    // Stripe disabled
+    const troopsWithMrr = troops.map(t => ({ ...t, mrr: 0 }))
     return { troops: troopsWithMrr, total, pages: Math.ceil(total / limit) }
 }
 
@@ -397,254 +273,31 @@ export async function getTransactions({
     limit?: number,
     startingAfter?: string
 }) {
-    const session = await auth()
-    if ((session?.user as any)?.role !== "PLATFORM_ADMIN") throw new Error("Unauthorized")
-
-    const stripe: any = process.env.NEXT_PUBLIC_IS_HOSTED === "true" ? require("@/lib/stripe").getStripe() : null
-
-    if (!stripe) {
-        return { data: [] as any[], hasMore: false, lastId: undefined }
-    }
-
-    // Fetch charges from Stripe
-    const charges = await stripe.charges.list({
-        limit,
-        starting_after: startingAfter,
-        expand: ['data.customer']
-    })
-
     return {
-        data: charges.data,
-        hasMore: charges.has_more,
-        lastId: charges.data.length > 0 ? charges.data[charges.data.length - 1].id : undefined
+        data: [],
+        hasMore: false,
+        lastId: undefined
     }
 }
 
-export async function getWebhooks({
-    page = 1,
-    limit = 20,
-    status
-}: {
-    page?: number,
-    limit?: number,
-    status?: string
-}) {
-    const session = await auth()
-    if ((session?.user as any)?.role !== "PLATFORM_ADMIN") throw new Error("Unauthorized")
-
-    const where: any = {}
-    if (status) {
-        if (status === 'failed') where.error = { not: null }
-        if (status === 'success') where.error = null
-    }
-
-    const [events, total] = await Promise.all([
-        prisma.webhookEvent.findMany({
-            where,
-            take: limit,
-            skip: (page - 1) * limit,
-            orderBy: { createdAt: 'desc' }
-        }),
-        prisma.webhookEvent.count({ where })
-    ])
-
-    // Try to enrich with Troop Name
-    const eventsWithTroop = await Promise.all(events.map(async (ev) => {
-        let troopName = null
-        try {
-            const payload = ev.payload as any
-            // Common paths for customer ID
-            const customerId = payload.customer || payload.data?.object?.customer
-            if (customerId && typeof customerId === 'string') {
-                const troop = await prisma.troop.findFirst({
-                    where: { subscription: { stripeCustomerId: customerId } },
-                    select: { name: true, slug: true }
-                })
-                if (troop) troopName = troop.name
-            }
-        } catch (e) {
-            // Ignore parsing errors
+export async function getWebhooks() {
+            return { events: [], total: 0, pages: 0 };
         }
-        return { ...ev, troopName }
-    }))
-
-    return { events: eventsWithTroop, total, pages: Math.ceil(total / limit) }
-}
 
 export async function issueRefund(chargeId: string, amountCents?: number, reason?: string) {
-    const session = await auth()
-    if (!session?.user?.id || (session.user as any).role !== "PLATFORM_ADMIN") throw new Error("Unauthorized")
-
-    const stripe: any = process.env.NEXT_PUBLIC_IS_HOSTED === "true" ? require("@/lib/stripe").getStripe() : null
-
-    if (!stripe) {
-        throw new Error("Stripe is disabled in self-hosted mode")
-    }
-
-    try {
-        const refund = await stripe.refunds.create({
-            charge: chargeId,
-            amount: amountCents, // Optional: full refund if null
-            reason: reason as any || 'requested_by_customer'
-        })
-
-        await prisma.adminAuditLog.create({
-            data: {
-                adminId: session.user.id,
-                action: 'ISSUE_REFUND',
-                targetId: chargeId,
-                details: {
-                    refundId: refund.id,
-                    amount: amountCents ? amountCents / 100 : 'full',
-                    reason
-                }
-            }
-        })
-
-        revalidatePath("/admin/transactions")
-        return { success: true, refundId: refund.id }
-
-    } catch (e: any) {
-        throw new Error(`Refund Failed: ${e.message}`)
-    }
+    throw new Error("Refunds are disabled in self-hosted mode.")
 }
 
 // Coupon & Promotion Code Management
-export async function getCoupons() {
-    const session = await auth()
-    if (!session?.user?.id || (session.user as any).role !== "PLATFORM_ADMIN") throw new Error("Unauthorized")
+export async function getCoupons() { throw new Error("Not supported in self-hosted"); }
 
-    const stripe: any = process.env.NEXT_PUBLIC_IS_HOSTED === "true" ? require("@/lib/stripe").getStripe() : null
+export async function createCoupon() { throw new Error("Not supported in self-hosted"); }
 
-    if (!stripe) return [] as any[]
+export async function deleteCoupon() { throw new Error("Not supported in self-hosted"); }
 
-    const coupons = await stripe.coupons.list({ limit: 100 })
-    return JSON.parse(JSON.stringify(coupons.data))
-}
+export async function getPromotionCodes() { throw new Error("Not supported in self-hosted"); }
 
-export async function createCoupon(data: {
-    name: string,
-    percent_off?: number,
-    amount_off?: number,
-    duration: 'once' | 'repeating' | 'forever',
-    duration_in_months?: number
-}) {
-    const session = await auth()
-    if (!session?.user?.id || (session.user as any).role !== "PLATFORM_ADMIN") throw new Error("Unauthorized")
+export async function createPromotionCode() { throw new Error("Not supported in self-hosted"); }
 
-    const stripe: any = process.env.NEXT_PUBLIC_IS_HOSTED === "true" ? require("@/lib/stripe").getStripe() : null
-
-    if (!stripe) throw new Error("Stripe is disabled in self-hosted mode")
-
-    const coupon = await stripe.coupons.create({
-        name: data.name,
-        percent_off: data.percent_off,
-        amount_off: data.amount_off ? data.amount_off * 100 : undefined, // to cents
-        currency: data.amount_off ? 'usd' : undefined,
-        duration: data.duration,
-        duration_in_months: data.duration === 'repeating' ? data.duration_in_months : undefined,
-    })
-
-    await prisma.adminAuditLog.create({
-        data: {
-            adminId: session.user.id,
-            action: 'CREATE_COUPON',
-            targetId: coupon.id,
-            details: data
-        }
-    })
-
-    revalidatePath("/admin/coupons")
-    return JSON.parse(JSON.stringify(coupon))
-}
-
-export async function deleteCoupon(couponId: string) {
-    const session = await auth()
-    if (!session?.user?.id || (session.user as any).role !== "PLATFORM_ADMIN") throw new Error("Unauthorized")
-
-    const stripe: any = process.env.NEXT_PUBLIC_IS_HOSTED === "true" ? require("@/lib/stripe").getStripe() : null
-
-    if (!stripe) throw new Error("Stripe is disabled in self-hosted mode")
-
-    await stripe.coupons.del(couponId)
-
-    await prisma.adminAuditLog.create({
-        data: {
-            adminId: session.user.id,
-            action: 'DELETE_COUPON',
-            targetId: couponId
-        }
-    })
-
-    revalidatePath("/admin/coupons")
-}
-
-export async function getPromotionCodes() {
-    const session = await auth()
-    if (!session?.user?.id || (session.user as any).role !== "PLATFORM_ADMIN") throw new Error("Unauthorized")
-
-    const stripe: any = process.env.NEXT_PUBLIC_IS_HOSTED === "true" ? require("@/lib/stripe").getStripe() : null
-
-    if (!stripe) return [] as any[]
-
-    const promoCodes = await stripe.promotionCodes.list({
-        limit: 100,
-        expand: ['data.coupon']
-    })
-    return JSON.parse(JSON.stringify(promoCodes.data))
-}
-
-export async function createPromotionCode(data: {
-    couponId: string,
-    code?: string,
-    max_redemptions?: number,
-    expires_at?: number
-}) {
-    const session = await auth()
-    if (!session?.user?.id || (session.user as any).role !== "PLATFORM_ADMIN") throw new Error("Unauthorized")
-
-    const stripe: any = process.env.NEXT_PUBLIC_IS_HOSTED === "true" ? require("@/lib/stripe").getStripe() : null
-
-    if (!stripe) throw new Error("Stripe is disabled in self-hosted mode")
-
-    const promo = await stripe.promotionCodes.create({
-        coupon: data.couponId,
-        code: data.code,
-        max_redemptions: data.max_redemptions,
-        expires_at: data.expires_at,
-    } as any)
-
-    await prisma.adminAuditLog.create({
-        data: {
-            adminId: session.user.id,
-            action: 'CREATE_PROMO_CODE',
-            targetId: promo.id,
-            details: data
-        }
-    })
-
-    revalidatePath("/admin/coupons")
-    return JSON.parse(JSON.stringify(promo))
-}
-
-export async function deactivatePromotionCode(promoId: string) {
-    const session = await auth()
-    if (!session?.user?.id || (session.user as any).role !== "PLATFORM_ADMIN") throw new Error("Unauthorized")
-
-    const stripe: any = process.env.NEXT_PUBLIC_IS_HOSTED === "true" ? require("@/lib/stripe").getStripe() : null
-
-    if (!stripe) throw new Error("Stripe is disabled in self-hosted mode")
-
-    await stripe.promotionCodes.update(promoId, { active: false })
-
-    await prisma.adminAuditLog.create({
-        data: {
-            adminId: session.user.id,
-            action: 'DEACTIVATE_PROMO_CODE',
-            targetId: promoId
-        }
-    })
-
-    revalidatePath("/admin/coupons")
-}
+export async function deactivatePromotionCode() { throw new Error("Not supported in self-hosted"); }
 

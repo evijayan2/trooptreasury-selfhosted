@@ -11,9 +11,8 @@ import { inviteUserForScout, updateScoutEmail } from "@/app/actions"
 import { ScoutEmailForm } from "@/components/scouts/ScoutEmailForm"
 import { getTroopContext } from "@/lib/auth-helpers"
 
-export default async function ScoutPage({ params }: { params: Promise<{ id: string }> }) {
-    const { id } = await params
-    const slug = "troop-1"
+export default async function ScoutPage({ params }: { params: Promise<any> }) {
+    const { id, slug } = await params
     const session = await auth()
 
     if (!session) redirect("/login")

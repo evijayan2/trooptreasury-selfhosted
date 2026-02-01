@@ -9,8 +9,10 @@ import { FooterInfo } from "@/components/dashboard/footer-info"
 
 export default async function TroopLayout({
     children,
+    params,
 }: {
     children: React.ReactNode
+    params: Promise<any>
 }) {
     const slug = "troop-1"
     const session = await auth()

@@ -9,7 +9,7 @@ import { ArrowRight, Package, Gift } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import { notFound, redirect } from "next/navigation"
 
-export default async function MyFundraisingPage({ }: {}) {
+export default async function MyFundraisingPage({ params }: { params: Promise<any> }) {
     const slug = "troop-1"
     const session = await auth()
     if (!session?.user) redirect("/login")

@@ -6,7 +6,7 @@ import { BulkIBADepositForm } from "@/components/finance/BulkIBADepositForm"
 import { Button } from "@/components/ui/button"
 import { PlusCircle } from "lucide-react"
 
-export default async function IBASetupPage({ }: {}) {
+export default async function IBASetupPage({ params }: { params: Promise<any> }) {
     const session = await auth()
     const slug = "troop-1"
     if (!session?.user?.id) {

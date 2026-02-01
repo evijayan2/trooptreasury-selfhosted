@@ -6,7 +6,7 @@ import { RolePermissionEditor } from "@/components/admin/role-permission-editor"
 import { ResetDatabaseCard } from "@/components/settings/reset-database-card"
 import { ExportDbButton } from "@/components/settings/export-db-button"
 
-export default async function Page({ }: {}) {
+export default async function Page({ params }: { params: Promise<any> }) {
     const slug = "troop-1"
     const session = await auth()
 

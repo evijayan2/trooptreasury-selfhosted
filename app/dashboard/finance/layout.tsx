@@ -6,8 +6,10 @@ import { redirect } from "next/navigation"
 
 export default async function FinanceLayout({
     children,
+    params,
 }: {
     children: React.ReactNode
+    params: Promise<any>
 }) {
     const session = await auth()
     const slug = "troop-1"
