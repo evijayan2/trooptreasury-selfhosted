@@ -20,7 +20,7 @@ export function Footer() {
         <footer className="mt-auto py-6 border-t text-center text-sm text-muted-foreground w-full">
             <div className="flex flex-col md:flex-row justify-between items-center px-4 gap-2">
                 <div>
-                    &copy; {new Date().getFullYear()} TroopTreasury. All rights reserved.
+                    &copy; {new Date().getFullYear()} TroopTreasury. All rights reserved. <span className="text-xs text-muted-foreground/50 ml-1">v{process.env.NEXT_PUBLIC_APP_VERSION}</span>
                 </div>
                 <div>
                     Contact: support@trooptreasury.com | (555) 123-4567

@@ -24,7 +24,7 @@ export function FooterInfo() {
     return (
         <div className="flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-muted-foreground w-full max-w-7xl mx-auto px-4">
             <div className="flex items-center gap-6">
-                <span>&copy; {date.getFullYear()} TroopTreasury</span>
+                <span>&copy; {date.getFullYear()} TroopTreasury <span className="text-muted-foreground/50">v{process.env.NEXT_PUBLIC_APP_VERSION}</span></span>
                 <span className="hidden md:inline text-gray-300">|</span>
                 <a href="mailto:support@trooptreasury.com" className="flex items-center gap-1 hover:text-primary transition-colors">
                     <Mail className="h-3 w-3" />
