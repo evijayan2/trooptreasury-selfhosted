@@ -33,7 +33,8 @@ export function PaymentRecorder({
     label = "Record Pay",
     className = "ml-2",
     variant = "outline",
-    scoutId
+    scoutId,
+    organizers = []
 }: {
     campoutId: string,
     adultId?: string,
@@ -42,13 +43,15 @@ export function PaymentRecorder({
     defaultAmount?: number,
     label?: string,
     className?: string,
-    variant?: "default" | "destructive" | "outline" | "secondary" | "ghost" | "link"
+    variant?: "default" | "destructive" | "outline" | "secondary" | "ghost" | "link",
+    organizers?: { adultId: string, adultName: string }[]
 }) {
     const router = useRouter()
     const { data: session } = useSession()
     const [open, setOpen] = useState(false)
     const [amount, setAmount] = useState(defaultAmount > 0 ? defaultAmount.toFixed(2) : "")
     const [baseSource, setBaseSource] = useState("CASH")
+    const [collectorId, setCollectorId] = useState<string>("TROOP") // Default to Troop (Bank Deposit)
 
     const handleRecord = async () => {
         if (!amount) return
@@ -61,11 +64,13 @@ export function PaymentRecorder({
             finalSource = "TROOP"
         }
 
+        const effectiveCollectorId = (baseSource === "CASH" && collectorId !== "TROOP") ? collectorId : undefined
+
         let result
         if (scoutId) {
-            result = await recordScoutPayment(campoutId, scoutId, amount, finalSource)
+            result = await recordScoutPayment(campoutId, scoutId, amount, finalSource, effectiveCollectorId)
         } else if (adultId) {
-            result = await recordAdultPayment(campoutId, adultId, amount, finalSource)
+            result = await recordAdultPayment(campoutId, adultId, amount, finalSource, effectiveCollectorId)
         } else {
             return
         }
@@ -111,7 +116,10 @@ export function PaymentRecorder({
 
                     <div className="space-y-2">
                         <Label>Method</Label>
-                        <Select value={baseSource} onValueChange={setBaseSource}>
+                        <Select value={baseSource} onValueChange={(val) => {
+                            setBaseSource(val)
+                            if (val !== "CASH") setCollectorId("TROOP")
+                        }}>
                             <SelectTrigger>
                                 <SelectValue />
                             </SelectTrigger>
@@ -123,13 +131,36 @@ export function PaymentRecorder({
                         </Select>
                     </div>
 
+                    {baseSource === "CASH" && (
+                        <div className="space-y-2">
+                            <Label>Collected By</Label>
+                            <Select value={collectorId} onValueChange={setCollectorId}>
+                                <SelectTrigger>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="TROOP">Troop (Bank Deposit)</SelectItem>
+                                    {organizers.map(org => (
+                                        <SelectItem key={org.adultId} value={org.adultId}>
+                                            {org.adultName} (Organizer)
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
+
                     <div className="text-[10px] text-muted-foreground bg-muted p-2 rounded">
-                        {baseSource === "BANK" ? (
+                        {baseSource === "CASH" ? (
+                            collectorId === "TROOP" ? (
+                                "Cash intended for Troop Bank Deposit. It will increase the Total Bank Balance immediately."
+                            ) : (
+                                `Cash held by ${organizers.find(o => o.adultId === collectorId)?.adultName || "Organizer"}. This will credit their personal reimbursement balance and NOT touch the bank balance.`
+                            )
+                        ) : baseSource === "BANK" ? (
                             "Money deposited directly to Troop Bank Account."
-                        ) : baseSource === "TROOP" ? (
-                            "Covered by Troop Funds (Subsidy)."
                         ) : (
-                            "System will prioritize reimbursing Troop expenses first, then Organizer expenses."
+                            "Covered by Troop Funds (Subsidy)."
                         )}
                     </div>
 

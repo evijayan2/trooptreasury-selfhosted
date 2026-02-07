@@ -10,15 +10,17 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { DataTableExport } from "@/components/ui/data-table-export"
 import { formatCurrency } from "@/lib/utils"
 import { DeleteTransactionButton } from "@/components/finance/DeleteTransactionButton"
 import { useSession } from "next-auth/react"
-import { publishCampaign, closeCampaign, deleteCampaign, toggleVolunteer, addCampaignTransaction, commitDistribution, calculateDistribution, deleteOrder } from "@/app/actions/fundraising"
-import { Trash2, Archive, Play, Loader2, DollarSign, Users, Calculator, CheckCircle, Plus, RefreshCw } from "lucide-react"
+import { publishCampaign, closeCampaign, reopenCampaign, deleteCampaign, toggleVolunteer, addCampaignTransaction, commitDistribution, calculateDistribution, deleteOrder, updateOrder } from "@/app/actions/fundraising"
+import { Trash2, Archive, Play, Loader2, DollarSign, Users, Calculator, CheckCircle, Plus, RefreshCw, Pencil, Package, Clock } from "lucide-react"
 import { useRouter, useParams } from "next/navigation"
 import { toast } from "sonner"
 import { ScoutPaymentForm } from "./ScoutPaymentForm"
+import { DirectSalesManager, AddInventoryForm } from "./DirectSalesManager"
 
 // Types
 type CampaignWithDetails = any
@@ -30,7 +32,7 @@ type HeaderInfo = {
     address?: string
 }
 
-export function CampaignManager({ campaign, scouts, headerInfo }: { campaign: CampaignWithDetails, scouts: Scout[], headerInfo?: HeaderInfo }) {
+export function CampaignManager({ campaign, scouts, headerInfo, adults, isAdmin }: { campaign: CampaignWithDetails, scouts: Scout[], headerInfo?: HeaderInfo, adults?: Array<{ id: string, name: string }>, isAdmin: boolean }) {
     const [activeTab, setActiveTab] = useState("overview")
     const [isPending, startTransition] = useTransition()
     const router = useRouter()
@@ -154,13 +156,14 @@ export function CampaignManager({ campaign, scouts, headerInfo }: { campaign: Ca
                     <TabsTrigger value="overview" className="shrink-0">Overview</TabsTrigger>
                     <TabsTrigger value="settings" className="shrink-0">Settings</TabsTrigger>
                     <TabsTrigger value="sales" className="shrink-0">Sales & Tickets</TabsTrigger>
+                    {isProductSale && <TabsTrigger value="direct-sales" className="shrink-0">Direct Sales</TabsTrigger>}
                     {!isProductSale && <TabsTrigger value="volunteers" className="shrink-0">Volunteers</TabsTrigger>}
                     <TabsTrigger value="transactions" className="shrink-0">Transactions</TabsTrigger>
                     <TabsTrigger value="distribution" className="shrink-0">Distribution</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="overview" className="space-y-4">
-                    <OverviewTab campaign={campaign} />
+                    <OverviewTab campaign={campaign} isAdmin={isAdmin} />
                 </TabsContent>
 
                 <TabsContent value="settings">
@@ -168,8 +171,14 @@ export function CampaignManager({ campaign, scouts, headerInfo }: { campaign: Ca
                 </TabsContent>
 
                 <TabsContent value="sales">
-                    <SalesTab campaign={campaign} scouts={scouts} />
+                    <SalesTab campaign={campaign} scouts={scouts} isAdmin={isAdmin} />
                 </TabsContent>
+
+                {isProductSale && (
+                    <TabsContent value="direct-sales">
+                        <DirectSalesManager campaign={campaign} scouts={scouts} adults={adults || []} />
+                    </TabsContent>
+                )}
 
                 {!isProductSale && (
                     <TabsContent value="volunteers">
@@ -178,11 +187,11 @@ export function CampaignManager({ campaign, scouts, headerInfo }: { campaign: Ca
                 )}
 
                 <TabsContent value="transactions">
-                    <TransactionsTab campaign={campaign} headerInfo={headerInfo} />
+                    <TransactionsTab campaign={campaign} headerInfo={headerInfo} isAdmin={isAdmin} />
                 </TabsContent>
 
                 <TabsContent value="distribution">
-                    <DistributionTab campaign={campaign} />
+                    <DistributionTab campaign={campaign} isAdmin={isAdmin} />
                 </TabsContent>
             </Tabs>
         </div>
@@ -192,6 +201,8 @@ export function CampaignManager({ campaign, scouts, headerInfo }: { campaign: Ca
 import { updateCampaignSettings } from "@/app/actions/fundraising"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
+
+import { AddProductDialog } from "./AddProductDialog"
 
 function SettingsTab({ campaign }: { campaign: any }) {
     const [isPending, startTransition] = useTransition()
@@ -210,11 +221,14 @@ function SettingsTab({ campaign }: { campaign: any }) {
 
     return (
         <div className="space-y-6">
-            {isProductSale && campaign.products && campaign.products.length > 0 && (
+            {isProductSale && (
                 <Card>
-                    <CardHeader>
-                        <CardTitle>Catalog Products</CardTitle>
-                        <CardDescription>View the products configured for this campaign.</CardDescription>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <div className="space-y-1">
+                            <CardTitle>Catalog Products</CardTitle>
+                            <CardDescription>View and manage products for this campaign.</CardDescription>
+                        </div>
+                        <AddProductDialog campaignId={campaign.id} />
                     </CardHeader>
                     <CardContent>
                         <Table>
@@ -321,7 +335,31 @@ function SettingsTab({ campaign }: { campaign: any }) {
     )
 }
 
-function OverviewTab({ campaign }: { campaign: any }) {
+const getDirectSalesStats = (campaign: any) => {
+    if (!campaign.directSalesInventory) return { revenue: 0, profit: 0, collected: 0 }
+
+    let revenue = 0
+    let profit = 0
+    let collected = 0
+
+    campaign.directSalesInventory.forEach((inv: any) => {
+        const productProfit = Number(inv.product?.ibaAmount || 0)
+        const productPrice = Number(inv.product?.price || 0)
+
+        // Correct access: inv.groupItems
+        const soldCount = inv.groupItems?.reduce((sum: number, item: any) => sum + (item.soldCount || 0), 0) || 0
+        const collectedAmt = inv.groupItems?.reduce((sum: number, item: any) => sum + (Number(item.amountCollected) || 0), 0) || 0
+
+        revenue += soldCount * productPrice
+        profit += soldCount * productProfit
+        collected += collectedAmt
+    })
+
+    return { revenue, profit, collected }
+}
+
+function OverviewTab({ campaign, isAdmin }: { campaign: any, isAdmin?: boolean }) {
+    const [isPending, startTransition] = useTransition()
     // Quick Math for Overview
     // Note: This relies on passed data being up to date
     const income = campaign.transactions
@@ -331,13 +369,56 @@ function OverviewTab({ campaign }: { campaign: any }) {
     // Virtual Sales Revenue
     const ticketRevenue = campaign.sales.reduce((sum: number, s: any) => sum + (s.quantity * Number(campaign.ticketPrice || 0)), 0)
     const orderRevenue = (campaign.orders || []).reduce((sum: number, o: any) => sum + (Number(o.amountPaid) || 0), 0)
-    const totalRevenue = income + ticketRevenue + orderRevenue
+    const orderGrossRevenue = (campaign.orders || []).reduce((sum: number, o: any) => sum + (o.quantity * Number(o.product?.price || 0)), 0)
+
+    // Direct Sales Revenue
+    const { revenue: directSalesRevenue, collected: directSalesCollected } = getDirectSalesStats(campaign)
+
+    // Total Revenue for Overview now matches Transactions (Collected + Manual + Orders)
+    const totalRevenue = income + ticketRevenue + orderRevenue + directSalesCollected
 
     const expenses = campaign.transactions
         .filter((t: any) => t.type === "EXPENSE")
         .reduce((sum: number, t: any) => sum + Number(t.amount), 0)
 
     const netProfit = totalRevenue - expenses
+    const totalInventoryGross = directSalesRevenue + orderGrossRevenue
+    const awaitingTurnIn = directSalesRevenue - directSalesCollected
+
+    // Calculate unique participants
+    const uniqueScoutIds = new Set<string>()
+
+    // Add scouts from sales (for non-product sales)
+    campaign.sales.forEach((s: any) => {
+        if (s.scoutId) uniqueScoutIds.add(s.scoutId)
+    })
+
+    // Add scouts from orders (for product sales)
+    if (campaign.orders) {
+        campaign.orders.forEach((o: any) => {
+            if (o.scoutId) uniqueScoutIds.add(o.scoutId)
+        })
+    }
+
+    // Add scouts from volunteers
+    if (campaign.volunteers) {
+        campaign.volunteers.forEach((v: any) => {
+            if (v.scoutId) uniqueScoutIds.add(v.scoutId)
+        })
+    }
+
+    // Add scouts from direct sales groups
+    if (campaign.directSalesInventory && campaign.type === 'PRODUCT_SALE') {
+        campaign.directSalesInventory.forEach((inv: any) => {
+            inv.groups?.forEach((group: any) => {
+                group.volunteers?.forEach((vol: any) => {
+                    if (vol.scoutId) uniqueScoutIds.add(vol.scoutId)
+                })
+            })
+        })
+    }
+
+    const participantCount = uniqueScoutIds.size
 
     return (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -373,11 +454,33 @@ function OverviewTab({ campaign }: { campaign: any }) {
             </Card>
             <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Inventory Sales (Gross)</CardTitle>
+                    <Package className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                    <div className="text-2xl font-bold">{formatCurrency(totalInventoryGross)}</div>
+                    <p className="text-xs text-muted-foreground">Total sold value (Group + Scout)</p>
+                </CardContent>
+            </Card>
+            <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Awaiting Turn-in</CardTitle>
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                    <div className={`text-2xl font-bold ${awaitingTurnIn > 0 ? "text-orange-600" : "text-muted-foreground"}`}>
+                        {formatCurrency(awaitingTurnIn)}
+                    </div>
+                    <p className="text-xs text-muted-foreground">Sold but not collected</p>
+                </CardContent>
+            </Card>
+            <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">Participants</CardTitle>
                     <Users className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                    <div className="text-2xl font-bold">{campaign.sales.length}</div>
+                    <div className="text-2xl font-bold">{participantCount}</div>
                     <p className="text-xs text-muted-foreground">Scouts Selling / Volunteering</p>
                 </CardContent>
             </Card>
@@ -385,11 +488,14 @@ function OverviewTab({ campaign }: { campaign: any }) {
     )
 }
 
-function SalesTab({ campaign, scouts }: { campaign: any, scouts: Scout[] }) {
+function SalesTab({ campaign, scouts, isAdmin }: { campaign: any, scouts: Scout[], isAdmin: boolean }) {
     const router = useRouter()
-    const { data: session } = useSession()
-    const isAdmin = ["ADMIN", "FINANCIER"].includes(session?.user?.role || "")
     const [isPending, startTransition] = useTransition()
+    const params = useParams()
+    const slug = params.slug as string
+    const isClosed = campaign.status === 'CLOSED'
+
+
 
     // Note: Sales editing would typically be another action. For brevity, assuming readonly or separate component for now unless requested.
     // The user didn't explicitly ask for Sales Editing in this prompt, but implied "scouts sell tickets". 
@@ -605,8 +711,9 @@ function SalesTab({ campaign, scouts }: { campaign: any, scouts: Scout[] }) {
                                             <TableHead>Product</TableHead>
                                             <TableHead>Qty</TableHead>
                                             <TableHead>Paid</TableHead>
+                                            <TableHead>Paid</TableHead>
                                             <TableHead>Scout</TableHead>
-                                            {isAdmin && <TableHead className="w-[50px]"></TableHead>}
+                                            {isAdmin && !isClosed && <TableHead className="w-[100px]"></TableHead>}
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -617,26 +724,33 @@ function SalesTab({ campaign, scouts }: { campaign: any, scouts: Scout[] }) {
                                                 <TableCell>{order.quantity}</TableCell>
                                                 <TableCell>{formatCurrency(order.amountPaid)}</TableCell>
                                                 <TableCell>{order.scout?.name}</TableCell>
-                                                {isAdmin && (
+                                                {isAdmin && !isClosed && (
                                                     <TableCell className="text-right">
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            className="h-8 w-8 text-destructive"
-                                                            onClick={() => {
-                                                                if (confirm("Delete this order?")) {
-                                                                    startTransition(async () => {
-                                                                        const params = useParams()
-                                                                        const slug = params.slug as string
-                                                                        const res = await deleteOrder(campaign.id, order.id, slug)
-                                                                        if (res.error) toast.error(res.error)
-                                                                        else toast.success("Order deleted")
-                                                                    })
-                                                                }
-                                                            }}
-                                                        >
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </Button>
+                                                        <div className="flex justify-end gap-1">
+                                                            <EditOrderDialog
+                                                                campaignId={campaign.id}
+                                                                order={order}
+                                                                slug={slug}
+                                                            />
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="h-8 w-8 text-destructive"
+                                                                onClick={() => {
+                                                                    if (confirm("Delete this order?")) {
+                                                                        startTransition(async () => {
+                                                                            const params = useParams()
+                                                                            const slug = params.slug as string
+                                                                            const res = await deleteOrder(campaign.id, order.id, slug)
+                                                                            if (res.error) toast.error(res.error)
+                                                                            else toast.success("Order deleted")
+                                                                        })
+                                                                    }
+                                                                }}
+                                                            >
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </Button>
+                                                        </div>
                                                     </TableCell>
                                                 )}
                                             </TableRow>
@@ -678,12 +792,16 @@ function SalesTab({ campaign, scouts }: { campaign: any, scouts: Scout[] }) {
                                                     {formatCurrency(fin.remaining)}
                                                 </TableCell>
                                                 <TableCell className="text-right">
-                                                    <ScoutPaymentForm
-                                                        campaignId={campaign.id}
-                                                        scoutId={fin.scout.id}
-                                                        scoutName={fin.scout.name}
-                                                        onSuccess={() => router.refresh()}
-                                                    />
+                                                    {!isClosed && (
+                                                        <ScoutPaymentForm
+                                                            campaignId={campaign.id}
+                                                            scoutId={fin.scout.id}
+                                                            scoutName={fin.scout.name}
+                                                            slug={slug}
+                                                            disabled={fin.remaining <= 0}
+                                                            onSuccess={() => router.refresh()}
+                                                        />
+                                                    )}
                                                 </TableCell>
                                             </TableRow>
                                         ))}
@@ -757,6 +875,7 @@ function VolunteersTab({ campaign, scouts }: { campaign: any, scouts: Scout[] })
     const [isPending, startTransition] = useTransition()
     const params = useParams()
     const slug = params.slug as string
+    const isClosed = campaign.status === 'CLOSED'
 
     const handleToggle = (scoutId: string, currentStatus: boolean) => {
         startTransition(async () => {
@@ -782,8 +901,8 @@ function VolunteersTab({ campaign, scouts }: { campaign: any, scouts: Scout[] })
                 <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
                     {roster.map(scout => (
                         <div key={scout.id}
-                            className={`flex items-center justify-between p-3 border rounded-md cursor-pointer transition-colors ${scout.isVolunteering ? "bg-green-50 border-green-200" : "hover:bg-gray-50"}`}
-                            onClick={() => !isPending && handleToggle(scout.id, scout.isVolunteering)}
+                            className={`flex items-center justify-between p-3 border rounded-md transition-colors ${scout.isVolunteering ? "bg-green-50 border-green-200" : "hover:bg-gray-50"} ${isClosed ? "cursor-default opacity-80" : "cursor-pointer"}`}
+                            onClick={() => !isPending && !isClosed && handleToggle(scout.id, scout.isVolunteering)}
                         >
                             <span className="font-medium">{scout.name}</span>
                             {scout.isVolunteering && <CheckCircle className="h-5 w-5 text-green-600" />}
@@ -795,12 +914,12 @@ function VolunteersTab({ campaign, scouts }: { campaign: any, scouts: Scout[] })
     )
 }
 
-function TransactionsTab({ campaign, headerInfo }: { campaign: any, headerInfo?: HeaderInfo }) {
-    const { data: session } = useSession()
-    const isAdmin = ["ADMIN", "FINANCIER"].includes(session?.user?.role || "")
+function TransactionsTab({ campaign, headerInfo, isAdmin }: { campaign: any, headerInfo?: HeaderInfo, isAdmin: boolean }) {
+    // isAdmin prop passed from parent (server-side auth)
     const [isPending, startTransition] = useTransition()
     const params = useParams()
     const slug = params.slug as string
+    const isClosed = campaign.status === 'CLOSED'
 
     // Controlled Form State
     const [type, setType] = useState<"EXPENSE" | "INCOME">("EXPENSE")
@@ -832,16 +951,29 @@ function TransactionsTab({ campaign, headerInfo }: { campaign: any, headerInfo?:
 
     // Calculate summaries
     const transactions = campaign.transactions || []
-    // Income = anything that's NOT expense and NOT IBA_DEPOSIT
-    const totalIncome = transactions
-        .filter((t: any) => t.type !== "EXPENSE" && t.type !== "IBA_DEPOSIT" && t.type !== "IBA_WITHDRAWAL")
+
+    const { revenue: directSalesRevenue, collected: directSalesCollected } = getDirectSalesStats(campaign)
+    const orderIncome = (campaign.orders || []).reduce((sum: number, o: any) => sum + (Number(o.amountPaid) || 0), 0)
+    const orderGrossRevenue = (campaign.orders || []).reduce((sum: number, o: any) => sum + (o.quantity * Number(o.product?.price || 0)), 0)
+    const totalInventoryGross = directSalesRevenue + orderGrossRevenue
+
+    // Income = Manual transactions + Sales
+    // We filter for INCOME types from manual ledger
+    const manualIncome = transactions
+        .filter((t: any) => ["DONATION_IN", "FUNDRAISING_INCOME", "REGISTRATION_INCOME"].includes(t.type))
         .reduce((sum: number, t: any) => sum + Number(t.amount), 0)
+
+    // Total Income includes actual collected money from sales
+    const totalIncome = manualIncome + directSalesCollected + orderIncome
+
     const totalExpense = transactions
         .filter((t: any) => t.type === "EXPENSE")
         .reduce((sum: number, t: any) => sum + Number(t.amount), 0)
+
     const totalIbaDeposits = transactions
         .filter((t: any) => t.type === "IBA_DEPOSIT")
         .reduce((sum: number, t: any) => sum + Number(t.amount), 0)
+
     const netProfit = totalIncome - totalExpense
     const troopShare = netProfit - totalIbaDeposits
 
@@ -851,10 +983,44 @@ function TransactionsTab({ campaign, headerInfo }: { campaign: any, headerInfo?:
             return { label: "SCOUT IBA", variant: "secondary" as const, className: "bg-green-100 text-green-700 border-green-200" }
         } else if (t.type === "EXPENSE") {
             return { label: "EXPENSE", variant: "destructive" as const, className: "" }
+        } else if (t.type === "SALES_REVENUE") {
+            return { label: "SALES", variant: "outline" as const, className: "bg-orange-50 text-orange-700 border-orange-200" }
         } else {
             return { label: "INCOME", variant: "outline" as const, className: "bg-blue-50 text-blue-700 border-blue-200" }
         }
     }
+
+    // Merge manual and virtual transactions
+    const virtualTransactions = [
+        ...(campaign.directSalesGroups || []).map((g: any) => {
+            const collected = g.items?.reduce((sum: number, i: any) => sum + (Number(i.amountCollected) || 0), 0) || 0
+            if (collected <= 0) return null
+            return {
+                id: `ds-${g.id}`,
+                createdAt: g.updatedAt,
+                description: `Direct Sales: ${g.name}`,
+                type: "SALES_REVENUE",
+                amount: collected,
+                isVirtual: true
+            }
+        }).filter(Boolean),
+        ...(campaign.orders || []).map((o: any) => {
+            const paid = Number(o.amountPaid) || 0
+            if (paid <= 0) return null
+            return {
+                id: `order-${o.id}`,
+                createdAt: o.createdAt,
+                description: `Order: ${o.customerName}${o.scout ? ` (${o.scout.name})` : ""}`,
+                type: "SALES_REVENUE",
+                amount: paid,
+                isVirtual: true
+            }
+        }).filter(Boolean)
+    ]
+
+    const allTransactions = [...transactions, ...virtualTransactions].sort((a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    )
 
     // Get description with scout name for IBA deposits
     const getDescription = (t: any) => {
@@ -867,7 +1033,7 @@ function TransactionsTab({ campaign, headerInfo }: { campaign: any, headerInfo?:
     return (
         <div className="space-y-6">
             {/* Summary Cards */}
-            <div className="grid gap-4 md:grid-cols-5">
+            <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-6">
                 <Card>
                     <CardHeader className="pb-2">
                         <CardTitle className="text-sm font-medium text-muted-foreground">Total Income</CardTitle>
@@ -910,10 +1076,19 @@ function TransactionsTab({ campaign, headerInfo }: { campaign: any, headerInfo?:
                         <p className="text-2xl font-bold text-blue-700">{formatCurrency(troopShare > 0 ? troopShare : 0)}</p>
                     </CardContent>
                 </Card>
+                <Card className="border-orange-200 bg-orange-50">
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium text-orange-700">Inventory Sales (Gross)</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <p className="text-2xl font-bold text-orange-700">{formatCurrency(totalInventoryGross)}</p>
+                        <p className="text-xs text-orange-600/80">Group + Scout</p>
+                    </CardContent>
+                </Card>
             </div>
 
             {/* Add Transaction Form */}
-            {isAdmin && (
+            {isAdmin && !isClosed && (
                 <Card>
                     <CardHeader>
                         <CardTitle>Add Transaction</CardTitle>
@@ -977,7 +1152,7 @@ function TransactionsTab({ campaign, headerInfo }: { campaign: any, headerInfo?:
                 <CardHeader className="flex flex-row items-center justify-between">
                     <CardTitle>Transaction History</CardTitle>
                     <DataTableExport
-                        data={transactions.map((t: any) => ({
+                        data={allTransactions.map((t: any) => ({
                             date: new Date(t.createdAt).toLocaleDateString(),
                             description: getDescription(t),
                             type: t.type,
@@ -1007,8 +1182,9 @@ function TransactionsTab({ campaign, headerInfo }: { campaign: any, headerInfo?:
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {transactions.map((t: any) => {
+                                {allTransactions.map((t: any) => {
                                     const typeDisplay = getTypeDisplay(t)
+                                    const isReal = !t.isVirtual
                                     return (
                                         <TableRow key={t.id}>
                                             <TableCell>{new Date(t.createdAt).toLocaleDateString()}</TableCell>
@@ -1021,13 +1197,13 @@ function TransactionsTab({ campaign, headerInfo }: { campaign: any, headerInfo?:
                                             <TableCell className="text-right font-mono">{formatCurrency(t.amount)}</TableCell>
                                             {isAdmin && (
                                                 <TableCell className="text-right">
-                                                    <DeleteTransactionButton id={t.id} description={t.description} slug={slug} />
+                                                    {isReal && <DeleteTransactionButton id={t.id} description={t.description} slug={slug} />}
                                                 </TableCell>
                                             )}
                                         </TableRow>
                                     )
                                 })}
-                                {transactions.length === 0 && (
+                                {allTransactions.length === 0 && (
                                     <TableRow>
                                         <TableCell colSpan={4} className="text-center text-muted-foreground">
                                             No transactions recorded yet.
@@ -1043,7 +1219,104 @@ function TransactionsTab({ campaign, headerInfo }: { campaign: any, headerInfo?:
     )
 }
 
-function DistributionTab({ campaign }: { campaign: any }) {
+function EditOrderDialog({ campaignId, order, slug }: { campaignId: string, order: any, slug: string }) {
+    const [open, setOpen] = useState(false)
+    const [isPending, startTransition] = useTransition()
+    const router = useRouter()
+
+    // Form state
+    const [customerName, setCustomerName] = useState(order.customerName)
+    const [quantity, setQuantity] = useState(order.quantity.toString())
+    const [amountPaid, setAmountPaid] = useState(Number(order.amountPaid).toFixed(2))
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault()
+        startTransition(async () => {
+            const res = await updateOrder(
+                campaignId,
+                order.id,
+                {
+                    customerName,
+                    quantity: parseInt(quantity),
+                    amountPaid: parseFloat(amountPaid)
+                },
+                slug
+            )
+            if (res.error) {
+                toast.error(res.error)
+            } else {
+                toast.success(res.message || "Order updated")
+                setOpen(false)
+                router.refresh()
+            }
+        })
+    }
+
+    return (
+        <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8">
+                    <Pencil className="h-4 w-4" />
+                </Button>
+            </DialogTrigger>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Edit Order</DialogTitle>
+                    <DialogDescription>
+                        Update the details for this order.
+                    </DialogDescription>
+                </DialogHeader>
+                <form onSubmit={handleSubmit}>
+                    <div className="grid gap-4 py-4">
+                        <div className="grid gap-2">
+                            <Label htmlFor="customerName">Customer Name</Label>
+                            <Input
+                                id="customerName"
+                                value={customerName}
+                                onChange={(e) => setCustomerName(e.target.value)}
+                                required
+                            />
+                        </div>
+                        <div className="grid gap-2">
+                            <Label htmlFor="quantity">Quantity</Label>
+                            <Input
+                                id="quantity"
+                                type="number"
+                                min="1"
+                                value={quantity}
+                                onChange={(e) => setQuantity(e.target.value)}
+                                required
+                            />
+                        </div>
+                        <div className="grid gap-2">
+                            <Label htmlFor="amountPaid">Amount Paid</Label>
+                            <Input
+                                id="amountPaid"
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={amountPaid}
+                                onChange={(e) => setAmountPaid(e.target.value)}
+                                required
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                            Cancel
+                        </Button>
+                        <Button type="submit" disabled={isPending}>
+                            {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Save Changes
+                        </Button>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
+    )
+}
+
+function DistributionTab({ campaign, isAdmin }: { campaign: any, isAdmin?: boolean }) {
     const [calcResult, setCalcResult] = useState<any>(null)
     const [isCalculating, startCalc] = useTransition()
     const [isCommitting, startCommit] = useTransition()
@@ -1095,20 +1368,46 @@ function DistributionTab({ campaign }: { campaign: any }) {
 
         const ticketRevenue = (campaign.sales || []).reduce((sum: number, s: any) => sum + (s.quantity * Number(campaign.ticketPrice || 0)), 0)
         const orderRevenue = (campaign.orders || []).reduce((sum: number, o: any) => sum + (Number(o.amountPaid) || 0), 0)
-        const totalRevenue = income + ticketRevenue + orderRevenue
+
+        // Calculate product COST to get profit
+        // Calculate Net Profit based on Gross Revenue - Expenses
+        // We ignore virtual product costs here to avoid double counting with real expenses
+        const { revenue: directSalesRevenue } = getDirectSalesStats(campaign)
+
+        const totalRevenue = income + ticketRevenue + orderRevenue + directSalesRevenue
 
         const expenses = (campaign.transactions || [])
             .filter((t: any) => t.type === "EXPENSE")
             .reduce((sum: number, t: any) => sum + Number(t.amount), 0)
 
         const netProfit = totalRevenue - expenses
+
         const troopShare = netProfit - totalDistributed
 
         return (
             <div className="space-y-6">
                 <div className="p-6 text-center bg-gray-50 dark:bg-slate-900/50 rounded-lg border">
                     <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300">Campaign Closed</h3>
-                    <p className="text-gray-500 dark:text-gray-400">Funds have been distributed and the campaign is archived.</p>
+                    <p className="text-gray-500 dark:text-gray-400 mb-4">Funds have been distributed and the campaign is archived.</p>
+                    {isAdmin && (
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                                if (confirm("Are you sure you want to reopen this campaign? \n\nWARNING: Existing 'Distribution' transactions will remain. If you plan to re-distribute funds, you should manually delete the old transactions first to avoid duplicate payouts.")) {
+                                    startCommit(async () => {
+                                        const res = await reopenCampaign(campaign.id, slug)
+                                        if (res.error) toast.error(res.error)
+                                        else toast.success(res.message)
+                                    })
+                                }
+                            }}
+                            disabled={isCommitting}
+                        >
+                            <RefreshCw className="mr-2 h-4 w-4" />
+                            Reopen Campaign
+                        </Button>
+                    )}
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-3 text-center">
@@ -1158,7 +1457,7 @@ function DistributionTab({ campaign }: { campaign: any }) {
                         )}
                     </CardContent>
                 </Card>
-            </div>
+            </div >
         )
     }
 

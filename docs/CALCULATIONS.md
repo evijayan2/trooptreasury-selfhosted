@@ -27,8 +27,8 @@ An event where the total cost is shared among participants.
 2.  **Cost Per Person**: $550 / 12 = **$45.83**
 3.  **Individual Obligations**:
     - Each Scout owes: $45.83
-    - Each Adult Attendee owes: $45.83
-    - Organizers owe: $0.00
+    - Each Adult Attendee (non-organizer) owes: $45.83
+    - Organizers owe: $0.00 (Unless they are also marked as Attendees)
 4.  **Reimbursements**:
     - Adult Leader A is owed: $300
     - Adult Leader B is owed: $50
@@ -74,10 +74,17 @@ Selling specific inventory items with defined costs and profits.
     - (10 * $10) + (2 * $20) = $100 + $40 = **$140.00**
 2.  **Total Vendor Cost**:
     - (10 * $6) + (2 * $12) = $60 + $24 = **$84.00**
-3.  **Scout IBA Earnings**:
+3.  **Total Product Profit**:
+    - $140 (Revenue) - $84 (Cost) = **$56.00**
+4.  **Scout IBA Earnings**:
     - (10 * $2) + (2 * $5) = $20 + $10 = **$30.00**
-4.  **Troop Net Profit**:
-    - $140 (Rev) - $84 (Cost) - $30 (Scout) = **$26.00**
+5.  **Troop Net Profit** (from Product Orders):
+    - $56 (Product Profit) - $30 (Scout IBA) = **$26.00**
+
+**Distribution Formula** (when products have specific IBA amounts):
+- **Troop/IBA Share** = Product Profit - Scout IBA amounts
+- **Seller Pool** = Total Scout IBA amounts
+- **Scout Allocations** = Scout IBA per unit × units sold
 
 *Note: Funds are credited to Timmy's IBA only when the campaign is marked CLOSED.*
 
@@ -134,3 +141,53 @@ A complex event with tickets, a volunteer pool, and a seller pool.
 5.  **Check Sum**:
     - $345 + $150 + $45 = **$540.00**
     - Total Allocated (30% of $1,800) = $540.00. **Matches.**
+
+---
+
+## 5. Organizer Cash Collection (Splitting Flow)
+
+**Scenario:** "Spring Campout 2026"
+An attendee pays cash to an organizer who already has out-of-pocket expenses.
+
+**Logic:**
+When cash is paid to an organizer, the system automatically splits the "Deposit" and "Reimbursement" portions based on the current **Troop Deficit**.
+
+1.  **Troop Deficit**: Direct Expenses (Troop Card) - Total Collected for Troop.
+2.  **Allocation**:
+    - If payment <= Troop Deficit: Entire payment is `REGISTRATION_INCOME` (filled troop coffers first).
+    - If payment > Troop Deficit: Excess is `REIMBURSEMENT` to the collector (filling organizer pockets).
+
+**Example:**
+- Troop spent $100 on Site (Deficit $100).
+- Organizer spent $50 on Food (Pending Reimbursement $50).
+- Scout pays **$120** cash to the organizer.
+- **Result:**
+    - $100 is recorded as `REGISTRATION_INCOME` (Troop now has $0 deficit).
+    - $20 is recorded as `REIMBURSEMENT` to the Organizer (Organizer now owed $30).
+
+---
+
+## 6. Internal Transfers & Bank Reconciliation
+
+**Scenario:** "Reallocating Troop Reserves to Scout IBA"
+
+**Logic:**
+- `INTERNAL_TRANSFER`: Used to move money between accounts (e.g., Troop General Fund to a Scout's IBA).
+- **Report Impact**: These are *excluded* from "Troop Income" in financial reports because they do not represent new income to the bank; they are just reallocations.
+- `IBA_RECLAIM`: Used to move unused IBA funds back to the Troop (e.g., when a scout leaves).
+
+---
+
+## 7. Annual Dues Tracking
+
+**Scenario:** "2025-2026 Scouting Year"
+
+**Logic:**
+- **Target Dues**: Defined as `annualDuesAmount` in the ACTIVE budget.
+- **Calculation**:
+    - `Paid`: Sum of transactions of type `DUES` for a scout.
+    - `Remaining`: `Target Dues` - `Paid`.
+- **Status**:
+    - **PAID**: Remaining <= 0.
+    - **PARTIAL**: Paid > 0 but Remaining > 0.
+    - **UNPAID**: Paid = 0.

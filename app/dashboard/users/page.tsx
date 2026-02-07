@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { notFound, redirect } from "next/navigation"
 import { UserTable } from "@/components/users/user-table"
 import { UserForm } from "@/components/users/user-form"
+import { UserImport } from "@/components/users/user-import"
 
 export default async function Page({ params }: { params: Promise<any> }) {
     const slug = "troop-1"
@@ -86,7 +87,10 @@ export default async function Page({ params }: { params: Promise<any> }) {
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <h1 className="text-3xl font-bold">User Management</h1>
-                <UserForm slug={slug} />
+                <div className="flex items-center gap-2">
+                    <UserImport slug={slug} />
+                    <UserForm slug={slug} />
+                </div>
             </div>
 
             <UserTable users={serializedUsers} allScouts={serializedScouts} slug={slug} />

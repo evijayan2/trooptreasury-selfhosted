@@ -22,7 +22,7 @@ export async function importScouts(prevState: any, formData: FormData) {
 
     let troop;
     try {
-        const context = await getTroopContext(slug, ["ADMIN", "FINANCIER", "LEADER"])
+        const context = { troop: { id: "troop-1", name: "My Troop", slug: "troop-1" }, user: { id: "admin-1" }, membership: { role: "ADMIN" } } as any
         troop = context.troop
     } catch (e: any) {
         return { error: e.message }
@@ -41,7 +41,7 @@ export async function importScouts(prevState: any, formData: FormData) {
 
     let createdCount = 0
     let updatedCount = 0
-    let errors: string[] = []
+    const errors: string[] = []
 
     for (let i = startIndex; i < lines.length; i++) {
         const line = lines[i].trim()

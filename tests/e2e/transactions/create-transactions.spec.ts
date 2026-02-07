@@ -43,12 +43,14 @@ test.describe('Transaction Management', () => {
      */
     test('TC054: should deposit to scout IBA account', async ({ adminPage, prisma }) => {
         // Create a test scout
+        const troop = await prisma.troop.findFirst();
         const scout = await prisma.scout.create({
             data: {
                 name: 'IBA Test Scout',
                 status: 'ACTIVE',
                 ibaBalance: new Decimal(0),
-            },
+                troopId: troop!.id,
+            } as any,
         });
 
         const initialBalance = scout.ibaBalance;
@@ -99,12 +101,14 @@ test.describe('Transaction Management', () => {
             where: { email: 'parent@test.trooptreasury.com' },
         });
 
+        const troop = await prisma.troop.findFirst();
         const scout = await prisma.scout.create({
             data: {
                 name: 'Parent Test Scout',
                 status: 'ACTIVE',
                 ibaBalance: new Decimal(0),
-            },
+                troopId: troop!.id,
+            } as any,
         });
 
         // Link parent to scout
@@ -150,13 +154,15 @@ test.describe('Transaction Management', () => {
      */
     test('TC052: should approve pending transaction', async ({ adminPage, prisma }) => {
         // Create pending transaction
+        const troop = await prisma.troop.findFirst();
         const transaction = await prisma.transaction.create({
             data: {
                 type: 'DONATION_IN',
                 amount: new Decimal(100),
                 description: 'Pending approval test',
                 status: 'PENDING',
-            },
+                troopId: troop!.id,
+            } as any,
         });
 
         await adminPage.goto('/dashboard/finance/transactions');

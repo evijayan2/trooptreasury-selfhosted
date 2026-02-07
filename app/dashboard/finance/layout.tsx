@@ -3,6 +3,7 @@ import Link from "next/link"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { redirect } from "next/navigation"
+import { hasPermission } from "@/lib/rbac"
 
 export default async function FinanceLayout({
     children,
@@ -35,6 +36,9 @@ export default async function FinanceLayout({
     })
 
     const role = member?.role
+    if (!role || !(await hasPermission(role, 'VIEW_FINANCE_MGMT', troop.id))) {
+        redirect(`/dashboard`)
+    }
 
     return (
         <div className="space-y-6">

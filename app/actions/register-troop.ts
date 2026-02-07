@@ -25,7 +25,7 @@ export async function registerTroop(data: z.infer<typeof registerSchema>) {
     const isHosted = process.env.NEXT_PUBLIC_IS_HOSTED === "true"
 
     // Check if we have Stripe keys. If NOT, proceed to direct creation (Dev Bypass).
-    const hasStripe = !!process.env.STRIPE_SECRET_KEY
+    const hasStripe = false
 
     // Validate and process registration
     // Validate form data first

@@ -40,6 +40,7 @@ export function PayoutControls({
     const [loading, setLoading] = useState<string | null>(null)
     const [confirmAction, setConfirmAction] = useState<PayoutAction | null>(null)
     const [payoutAmounts, setPayoutAmounts] = useState<Record<string, number>>({})
+    const [autoPayoutOnClose, setAutoPayoutOnClose] = useState(true)
 
     // Initialize payout amounts when dialog opens
     const handleOpenPayout = () => {
@@ -56,8 +57,12 @@ export function PayoutControls({
         setLoading(action)
         try {
             let res: any
-            if (action === "payout") res = await payoutOrganizers(campoutId, payoutAmounts)
-            else if (action === "close") res = await closeCampout(campoutId, slug)
+            if (action === "payout") {
+                res = await payoutOrganizers(campoutId, payoutAmounts)
+            } else if (action === "close") {
+                const finalPayouts = autoPayoutOnClose ? payoutAmounts : undefined
+                res = await closeCampout(campoutId, slug, finalPayouts)
+            }
 
             if (res.success) {
                 toast.success(res.message || "Action completed successfully")
@@ -105,21 +110,21 @@ export function PayoutControls({
                     size="sm"
                     variant="outline"
                     onClick={handleOpenPayout}
-                    disabled={loading !== null || !canPayout}
+                    disabled={loading !== null}
                     className={actionData.payout.buttonClass}
                 >
                     {loading === "payout" ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CircleDollarSign className="w-4 h-4 mr-2" />}
-                    Payout Organizers
+                    Settle Payouts
                 </Button>
 
                 <Button
                     size="sm"
                     variant="destructive"
                     onClick={() => setConfirmAction("close")}
-                    disabled={loading !== null || totalPending > 0}
+                    disabled={loading !== null}
                 >
                     {loading === "close" ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Lock className="w-4 h-4 mr-2" />}
-                    Close Campout
+                    {totalPending > 0 ? "Close (with Pending Expenses)" : "Close Campout"}
                 </Button>
             </div>
 
@@ -128,9 +133,33 @@ export function PayoutControls({
                     <DialogHeader>
                         <DialogTitle>{confirmAction && actionData[confirmAction].title}</DialogTitle>
                         <DialogDescription>
-                            {confirmAction && actionData[confirmAction].description}
+                            {confirmAction === "close" && totalPending > 0
+                                ? "This campout has unpaid expenses. Closing it will prevent further financial ledger changes, but you can still record reimbursements later."
+                                : confirmAction ? actionData[confirmAction].description : ""}
                         </DialogDescription>
                     </DialogHeader>
+
+                    {confirmAction === "close" && totalPending > 0 && (
+                        <div className="py-4 space-y-4">
+                            <div className="flex items-start space-x-3 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 rounded-lg">
+                                <input
+                                    type="checkbox"
+                                    id="auto-payout"
+                                    className="mt-1"
+                                    checked={autoPayoutOnClose}
+                                    onChange={(e) => setAutoPayoutOnClose(e.target.checked)}
+                                />
+                                <div className="grid gap-1.5 leading-none">
+                                    <label htmlFor="auto-payout" className="text-sm font-medium leading-none">
+                                        Reimburse all organizers now
+                                    </label>
+                                    <p className="text-xs text-muted-foreground">
+                                        This will create reimbursement transactions for total pending amount: ${totalPending.toFixed(2)}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     {confirmAction === "payout" && (
                         <div className="space-y-4 py-4 max-h-[400px] overflow-y-auto px-1">

@@ -26,10 +26,12 @@ interface Props {
     campaignId: string
     scoutId: string
     scoutName: string
+    slug: string
+    disabled?: boolean
     onSuccess?: () => void
 }
 
-export function ScoutPaymentForm({ campaignId, scoutId, scoutName, onSuccess }: Props) {
+export function ScoutPaymentForm({ campaignId, scoutId, scoutName, slug, disabled, onSuccess }: Props) {
     const { data: session } = useSession()
     const [open, setOpen] = useState(false)
     const [loading, setLoading] = useState(false)
@@ -44,6 +46,7 @@ export function ScoutPaymentForm({ campaignId, scoutId, scoutName, onSuccess }: 
     const onSubmit = async (data: FormData) => {
         setLoading(true)
         const formData = new FormData()
+        formData.append("slug", slug)
         formData.append("amount", data.amount)
         formData.append("type", "SCOUT_CASH_TURN_IN")
         formData.append("description", data.description || `Cash turn-in from ${scoutName}`)
@@ -72,7 +75,7 @@ export function ScoutPaymentForm({ campaignId, scoutId, scoutName, onSuccess }: 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" disabled={disabled}>
                     <Plus className="w-4 h-4 mr-2" />
                     Record Payment
                 </Button>

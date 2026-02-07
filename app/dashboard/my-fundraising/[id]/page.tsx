@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma"
 import { notFound, redirect } from "next/navigation"
 import { OrderManager } from "@/components/fundraising/OrderManager"
 import { EventParticipationManager } from "@/components/fundraising/event-participation-manager"
+import { DirectSalesVolunteerView } from "@/components/fundraising/DirectSalesVolunteerView"
+import { getMyDirectSalesGroups } from "@/app/actions/volunteer-sales-actions"
 
 export default async function ScoutCampaignPage({ params }: { params: Promise<any> }) {
     const { slug, id } = await params
@@ -100,7 +102,7 @@ export default async function ScoutCampaignPage({ params }: { params: Promise<an
                             ibaAmount: l.product.ibaAmount.toNumber()
                         } : null
                     }))}
-                    slug={slug}                />
+                    slug={slug} />
             </div>
         )
     }
@@ -115,6 +117,10 @@ export default async function ScoutCampaignPage({ params }: { params: Promise<an
         orderBy: { createdAt: 'desc' }
     })
 
+    // Fetch direct sales groups for this volunteer
+    const directSalesResult = await getMyDirectSalesGroups(id, slug)
+    const directSalesGroups = directSalesResult.success ? directSalesResult.groups || [] : []
+
     return (
         <div className="space-y-6">
             <div>
@@ -122,6 +128,12 @@ export default async function ScoutCampaignPage({ params }: { params: Promise<an
                 <p className="text-muted-foreground">Manage your sales and participation</p>
             </div>
 
+            {/* Direct Sales Groups - shown only if volunteer is assigned to any groups */}
+            {directSalesGroups.length > 0 && (
+                <DirectSalesVolunteerView groups={directSalesGroups} slug={slug} />
+            )}
+
+            {/* Regular Orders */}
             <OrderManager
                 campaign={{
                     ...campaign,

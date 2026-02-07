@@ -23,8 +23,8 @@ export function NavLinks({ role, permissions, scoutId, slug, onNavigate }: NavLi
         { name: 'Dashboard', href: baseUrl, icon: Home, permission: 'VIEW_DASHBOARD' },
         { name: 'Scouts', href: `${baseUrl}/scouts`, icon: Users, permission: 'VIEW_SCOUTS' },
         {
-            name: role === 'SCOUT' ? 'Transactions' : 'Financials',
-            href: role === 'SCOUT' && scoutId ? `${baseUrl}/scouts/${scoutId}` : `${baseUrl}/finance`,
+            name: (role === 'SCOUT' || role === 'PARENT') ? 'Transactions' : 'Financials',
+            href: (role === 'SCOUT' || role === 'PARENT') ? `${baseUrl}/scouts?view=transactions` : `${baseUrl}/finance`,
             icon: DollarSign,
             permission: 'VIEW_TRANSACTIONS'
         },
@@ -44,7 +44,11 @@ export function NavLinks({ role, permissions, scoutId, slug, onNavigate }: NavLi
 
         if (role === 'ADMIN') return true
 
+        // Hide "Scouts" menu for SCOUT role (they see their own detail page)
         if (role === 'SCOUT' && link.name === 'Scouts') return false
+
+        // Hide "Transactions" menu for PARENT role (they see roster and can click to view transactions)
+        if (role === 'PARENT' && link.name === 'Transactions') return false
 
         if (link.permission) {
             return permissions.includes(link.permission)

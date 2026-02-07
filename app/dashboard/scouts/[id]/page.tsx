@@ -23,7 +23,8 @@ export default async function ScoutPage({ params }: { params: Promise<any> }) {
         include: {
             transactions: {
                 orderBy: { createdAt: 'desc' }
-            }
+            },
+            user: true
         }
     })
 
@@ -91,7 +92,7 @@ export default async function ScoutPage({ params }: { params: Promise<any> }) {
                     </CardContent>
                 </Card>
 
-                {troopContext.userRole !== 'SCOUT' && (
+                {troopContext.userRole !== 'SCOUT' && (!scout.userId || !scout.user?.isActive) && (
                     <Card>
                         <CardHeader className="pb-2">
                             <CardTitle className="text-sm font-medium text-gray-500">

@@ -21,9 +21,10 @@ export function UserTable({ users, allScouts, slug }: { users: any[], allScouts:
                 <TableHeader>
                     <TableRow>
                         <TableHead>Name</TableHead>
+                        <TableHead>Email</TableHead>
                         <TableHead>Role</TableHead>
                         <TableHead>Created</TableHead>
-                        <TableHead>Status / Deactivated</TableHead>
+                        <TableHead>Status</TableHead>
                         <TableHead className="w-[100px]">Actions</TableHead>
                     </TableRow>
                 </TableHeader>
@@ -78,7 +79,7 @@ export function UserTable({ users, allScouts, slug }: { users: any[], allScouts:
                     ))}
                     {users.length === 0 && (
                         <TableRow>
-                            <TableCell colSpan={5} className="h-24 text-center">
+                            <TableCell colSpan={6} className="h-24 text-center">
                                 No users found.
                             </TableCell>
                         </TableRow>

@@ -1,7 +1,7 @@
 "use server"
 
 import { prisma } from "@/lib/prisma"
-import { Role, TransactionType, CampoutStatus, ScoutStatus, CampoutAdultRole } from "@prisma/client"
+import { Role, TransactionType, ScoutStatus, CampoutAdultRole } from "@prisma/client"
 import { z } from "zod"
 import bcrypt from "bcryptjs"
 import { auth, signIn } from "@/auth"
@@ -10,7 +10,7 @@ import { AuthError } from "next-auth"
 import { Decimal } from "decimal.js"
 import { isTroopAdmin, canManageFinances, canManageExpense, getTroopContext, checkTroopPermission } from "@/lib/auth-helpers"
 import { revalidatePath } from "next/cache"
-import { redirect } from "next/navigation"
+
 
 // Initialize Resend (requires env var RESEND_API_KEY)
 const resendApiKey = process.env.RESEND_API_KEY
@@ -492,7 +492,6 @@ export async function createScout(prevState: any, formData: FormData) {
                     age: age ? parseInt(age) : null,
                     status,
                     troopId: troop.id,
-                    // @ts-ignore
                     email: email || null,
                     ibaBalance: initialBalance ? new Decimal(initialBalance) : new Decimal(0),
                 }
@@ -516,7 +515,7 @@ export async function createScout(prevState: any, formData: FormData) {
     }
 }
 
-export async function registerScoutForCampout(campoutId: string, scoutId: string) {
+export async function registerScoutForCampout(campoutId: string, scoutId: string, slug?: string) {
     const session = await auth()
     if (!session) return { error: "Unauthorized" }
 
@@ -545,6 +544,11 @@ export async function registerScoutForCampout(campoutId: string, scoutId: string
             }
         })
         if (!isLinked) return { error: "Unauthorized: You can only register your own scouts." }
+    } else if (userRole === "SCOUT") {
+        const linkedScout = await prisma.scout.findUnique({ where: { userId: session.user.id } })
+        if (!linkedScout || linkedScout.id !== scoutId) {
+            return { error: "Unauthorized: You can only register yourself." }
+        }
     } else if (!["ADMIN", "FINANCIER", "LEADER"].includes(userRole)) {
         return { error: "Unauthorized" }
     }
@@ -556,11 +560,78 @@ export async function registerScoutForCampout(campoutId: string, scoutId: string
                 scoutId,
             }
         })
-        revalidatePath(`/dashboard/campouts/${campoutId}`)
+        if (slug) {
+            revalidatePath(`/dashboard/campouts/${campoutId}`)
+        } else {
+            revalidatePath(`/dashboard/campouts/${campoutId}`)
+        }
         return { success: true, message: "Scout registered" }
     } catch (error) {
         console.error("Registration Error:", error)
         return { error: "Failed to register scout (may already be registered)" }
+    }
+}
+
+export async function registerAdultForCampout(campoutId: string, adultId: string, slug?: string) {
+    const session = await auth()
+    if (!session) return { error: "Unauthorized" }
+
+    const campout = await prisma.campout.findUnique({ where: { id: campoutId } })
+    if (!campout) return { error: "Campout not found" }
+
+    // Fetch actual troop role
+    const membership = await prisma.troopMember.findUnique({
+        where: {
+            troopId_userId: {
+                troopId: campout.troopId,
+                userId: session.user.id
+            }
+        }
+    })
+    const userRole = membership?.role || "SCOUT"
+
+    // Only Admins/Leaders/Financiers can register other adults
+    if (!["ADMIN", "FINANCIER", "LEADER"].includes(userRole)) {
+        return { error: "Unauthorized: Only Admins can register other adults." }
+    }
+
+    try {
+        await prisma.campoutAdult.create({
+            data: {
+                campoutId,
+                adultId,
+                role: "ATTENDEE"
+            }
+        })
+        if (slug) {
+            revalidatePath(`/dashboard/campouts/${campoutId}`)
+        } else {
+            revalidatePath(`/dashboard/campouts/${campoutId}`)
+        }
+        return { success: true, message: "Adult registered successfully" }
+    } catch (error) {
+        console.error("Register Adult Error:", error)
+        return { error: "Failed to register adult (may already be registered)" }
+    }
+}
+
+export async function joinCampoutAsAdult(campoutId: string, slug: string) {
+    const session = await auth()
+    if (!session) return { error: "Unauthorized" }
+
+    try {
+        await prisma.campoutAdult.create({
+            data: {
+                campoutId,
+                adultId: session.user.id,
+                role: "ATTENDEE"
+            }
+        })
+        revalidatePath(`/dashboard/campouts/${campoutId}`)
+        return { success: true, message: "Joined as adult successfully" }
+    } catch (error) {
+        console.error("Join Adult Error:", error)
+        return { error: "Failed to join (may already be registered)" }
     }
 }
 
@@ -974,7 +1045,12 @@ export async function updateRolePermissions(prevState: any, formData: FormData) 
 
     try {
         const permissionsJson = formData.get("permissions") as string
-        const permissions = JSON.parse(permissionsJson)
+        const permissions = JSON.parse(permissionsJson) as Record<string, string[]>
+
+        // Safety enforcement: Scouts are NEVER allowed VIEW_TRANSACTIONS
+        if (permissions.SCOUT) {
+            permissions.SCOUT = permissions.SCOUT.filter(p => p !== 'VIEW_FINANCE_MGMT')
+        }
 
         // Merge with existing settings
         const currentSettings = (troop.settings as any) || {}
@@ -1038,7 +1114,7 @@ export async function assignAdultToCampout(campoutId: string, adultId: string, r
     }
 }
 
-export async function recordAdultPayment(campoutId: string, adultId: string, amount: string, source: string = "CASH") {
+export async function recordAdultPayment(campoutId: string, adultId: string, amount: string, source: string = "CASH", collectorId?: string) {
     const session = await auth()
     if (!session) return { error: "Unauthorized" }
 
@@ -1066,34 +1142,47 @@ export async function recordAdultPayment(campoutId: string, adultId: string, amo
 
         // Smart Cash Allocation
         if (source === "CASH") {
-            // 1. Calculate Troop Financial Position for this Campout
-            const txs = await prisma.transaction.findMany({
-                where: { campoutId: campoutId, status: "APPROVED" }
-            })
-
-            const troopDirectExpenses = txs
-                .filter(t => t.type === "EXPENSE")
-                .reduce((sum, t) => sum.plus(t.amount), new Decimal(0))
-
-            const troopCollected = txs
-                .filter(t => t.type === "REGISTRATION_INCOME")
-                .reduce((sum, t) => sum.plus(t.amount), new Decimal(0))
-
-            const troopDeficit = troopDirectExpenses.minus(troopCollected)
-
-            // 2. Determine Split
             let depositAmount = new Decimal(0)
             let reimburseAmount = new Decimal(0)
+            let collectorName = ""
 
-            if (troopDeficit.gt(0)) {
-                if (paymentAmount.lte(troopDeficit)) {
-                    depositAmount = paymentAmount
-                } else {
-                    depositAmount = troopDeficit
-                    reimburseAmount = paymentAmount.minus(troopDeficit)
-                }
-            } else {
+            if (collectorId) {
+                // If a collector is explicitly named, all cash goes to them
                 reimburseAmount = paymentAmount
+                const collector = await prisma.user.findUnique({ where: { id: collectorId } })
+                collectorName = collector?.name || "Organizer"
+            } else {
+                // If no collector is named, it's a direct bank deposit
+                depositAmount = paymentAmount
+                collectorName = "Troop Bank"
+            }
+            if (false) {
+                // 1. Calculate Troop Financial Position for this Campout
+                const txs = await prisma.transaction.findMany({
+                    where: { campoutId: campoutId, status: "APPROVED" }
+                })
+
+                const troopDirectExpenses = txs
+                    .filter(t => t.type === "EXPENSE")
+                    .reduce((sum, t) => sum.plus(t.amount), new Decimal(0))
+
+                const troopCollected = txs
+                    .filter(t => t.type === "REGISTRATION_INCOME")
+                    .reduce((sum, t) => sum.plus(t.amount), new Decimal(0))
+
+                const troopDeficit = troopDirectExpenses.minus(troopCollected)
+
+                // 2. Determine Split
+                if (troopDeficit.gt(0)) {
+                    if (paymentAmount.lte(troopDeficit)) {
+                        depositAmount = paymentAmount
+                    } else {
+                        depositAmount = troopDeficit
+                        reimburseAmount = paymentAmount.minus(troopDeficit)
+                    }
+                } else {
+                    reimburseAmount = paymentAmount
+                }
             }
 
             // 3. Create Transactions
@@ -1103,7 +1192,7 @@ export async function recordAdultPayment(campoutId: string, adultId: string, amo
                         troopId: campout.troopId,
                         type: "REGISTRATION_INCOME",
                         amount: depositAmount,
-                        description: "Adult Campout Fee Payment (Manual/Cash - Troop Deposit)",
+                        description: `Adult Campout Fee Payment (Manual/Cash - Troop Deposit${collectorId ? " via " + collectorName : ""})`,
                         campoutId: campoutId,
                         userId: adultId,
                         approvedBy: session.user.id,
@@ -1113,18 +1202,36 @@ export async function recordAdultPayment(campoutId: string, adultId: string, amo
             }
 
             if (reimburseAmount.gt(0)) {
+                // Record the payment for the adult
                 await prisma.transaction.create({
                     data: {
                         troopId: campout.troopId,
                         type: "EVENT_PAYMENT",
                         amount: reimburseAmount,
-                        description: "Adult Campout Fee Payment (Manual/Cash - Organizer Held)",
+                        description: `Adult Campout Fee Payment (Manual/Cash - Held by ${collectorName})`,
                         campoutId: campoutId,
                         userId: adultId,
                         approvedBy: session.user.id,
                         status: "APPROVED"
                     }
                 })
+
+                // CREDIT THE ORGANIZER: Record a reimbursement transaction for them
+                if (collectorId) {
+                    const payer = await prisma.user.findUnique({ where: { id: adultId } })
+                    await prisma.transaction.create({
+                        data: {
+                            troopId: campout.troopId,
+                            type: "REIMBURSEMENT",
+                            amount: reimburseAmount,
+                            description: `Cash Collection Credit (from ${payer?.name || "Adult"})`,
+                            campoutId: campoutId,
+                            userId: collectorId,
+                            approvedBy: session.user.id,
+                            status: "APPROVED"
+                        }
+                    })
+                }
             }
 
         } else {
@@ -1170,7 +1277,7 @@ export async function recordAdultPayment(campoutId: string, adultId: string, amo
     }
 }
 
-export async function recordScoutPayment(campoutId: string, scoutId: string, amount: string, source: string = "CASH") {
+export async function recordScoutPayment(campoutId: string, scoutId: string, amount: string, source: string = "CASH", collectorId?: string) {
     const session = await auth()
     if (!session) return { error: "Unauthorized" }
 
@@ -1198,34 +1305,47 @@ export async function recordScoutPayment(campoutId: string, scoutId: string, amo
 
         // Smart Cash Allocation
         if (source === "CASH") {
-            // 1. Calculate Troop Financial Position for this Campout
-            const txs = await prisma.transaction.findMany({
-                where: { campoutId: campoutId, status: "APPROVED" }
-            })
-
-            const troopDirectExpenses = txs
-                .filter(t => t.type === "EXPENSE")
-                .reduce((sum, t) => sum.plus(t.amount), new Decimal(0))
-
-            const troopCollected = txs
-                .filter(t => t.type === "REGISTRATION_INCOME")
-                .reduce((sum, t) => sum.plus(t.amount), new Decimal(0))
-
-            const troopDeficit = troopDirectExpenses.minus(troopCollected)
-
-            // 2. Determine Split
             let depositAmount = new Decimal(0)
             let reimburseAmount = new Decimal(0)
+            let collectorName = ""
 
-            if (troopDeficit.gt(0)) {
-                if (paymentAmount.lte(troopDeficit)) {
-                    depositAmount = paymentAmount
-                } else {
-                    depositAmount = troopDeficit
-                    reimburseAmount = paymentAmount.minus(troopDeficit)
-                }
-            } else {
+            if (collectorId) {
+                // If a collector is explicitly named, all cash goes to them
                 reimburseAmount = paymentAmount
+                const collector = await prisma.user.findUnique({ where: { id: collectorId } })
+                collectorName = collector?.name || "Organizer"
+            } else {
+                // If no collector is named, it's a direct bank deposit
+                depositAmount = paymentAmount
+                collectorName = "Troop Bank"
+            }
+            if (false) {
+                // 1. Calculate Troop Financial Position for this Campout
+                const txs = await prisma.transaction.findMany({
+                    where: { campoutId: campoutId, status: "APPROVED" }
+                })
+
+                const troopDirectExpenses = txs
+                    .filter(t => t.type === "EXPENSE")
+                    .reduce((sum, t) => sum.plus(t.amount), new Decimal(0))
+
+                const troopCollected = txs
+                    .filter(t => t.type === "REGISTRATION_INCOME")
+                    .reduce((sum, t) => sum.plus(t.amount), new Decimal(0))
+
+                const troopDeficit = troopDirectExpenses.minus(troopCollected)
+
+                // 2. Determine Split
+                if (troopDeficit.gt(0)) {
+                    if (paymentAmount.lte(troopDeficit)) {
+                        depositAmount = paymentAmount
+                    } else {
+                        depositAmount = troopDeficit
+                        reimburseAmount = paymentAmount.minus(troopDeficit)
+                    }
+                } else {
+                    reimburseAmount = paymentAmount
+                }
             }
 
             // 3. Create Transactions
@@ -1235,7 +1355,7 @@ export async function recordScoutPayment(campoutId: string, scoutId: string, amo
                         troopId: campout.troopId,
                         type: "REGISTRATION_INCOME",
                         amount: depositAmount,
-                        description: "Scout Campout Fee Payment (Manual/Cash - Troop Deposit)",
+                        description: `Scout Campout Fee Payment (Manual/Cash - Troop Deposit${collectorId ? " via " + collectorName : ""})`,
                         campoutId: campoutId,
                         scoutId: scoutId,
                         approvedBy: session.user.id,
@@ -1245,18 +1365,36 @@ export async function recordScoutPayment(campoutId: string, scoutId: string, amo
             }
 
             if (reimburseAmount.gt(0)) {
+                // Record the payment for the scout
                 await prisma.transaction.create({
                     data: {
                         troopId: campout.troopId,
                         type: "EVENT_PAYMENT",
                         amount: reimburseAmount,
-                        description: "Scout Campout Fee Payment (Manual/Cash - Organizer Held)",
+                        description: `Scout Campout Fee Payment (Manual/Cash - Held by ${collectorName})`,
                         campoutId: campoutId,
                         scoutId: scoutId,
                         approvedBy: session.user.id,
                         status: "APPROVED"
                     }
                 })
+
+                // CREDIT THE ORGANIZER: Record a reimbursement transaction for them
+                if (collectorId) {
+                    const scout = await prisma.scout.findUnique({ where: { id: scoutId } })
+                    await prisma.transaction.create({
+                        data: {
+                            troopId: campout.troopId,
+                            type: "REIMBURSEMENT",
+                            amount: reimburseAmount,
+                            description: `Cash Collection Credit (from ${scout?.name || "Scout"})`,
+                            campoutId: campoutId,
+                            userId: collectorId,
+                            approvedBy: session.user.id,
+                            status: "APPROVED"
+                        }
+                    })
+                }
             }
 
         } else {
@@ -2459,3 +2597,191 @@ export async function updateScoutEmail(scoutId: string, email: string, slug: str
     }
 }
 
+export async function importUsers(slug: string, users: { name: string; email: string; role: string; password?: string }[]) {
+    const session = await auth()
+    if (!session) return { error: "Unauthorized" }
+
+    const troop = await prisma.troop.findUnique({ where: { slug } })
+    if (!troop) return { error: "Troop not found" }
+
+    // Check Auth
+    const membership = await prisma.troopMember.findUnique({
+        where: { troopId_userId: { troopId: troop.id, userId: session.user.id } }
+    })
+    if (!membership || !["ADMIN", "LEADER"].includes(membership.role)) {
+        return { error: "Unauthorized: Admins only" }
+    }
+
+    const results = {
+        importedCount: 0,
+        failed: 0,
+        errors: [] as string[]
+    }
+
+    for (const userData of users) {
+        try {
+            const email = userData.email.toLowerCase().trim()
+            const name = userData.name.trim()
+            const role = (userData.role.toUpperCase() as Role) || "SCOUT"
+            const password = userData.password
+
+            if (!email || !name) {
+                results.failed++
+                results.errors.push(`Missing email or name for ${userData.email || 'unknown user'}`)
+                continue
+            }
+
+            await prisma.$transaction(async (tx) => {
+                // Upsert User
+                let user = await tx.user.findUnique({ where: { email } })
+
+                const updateData: any = { name }
+                if (password) {
+                    updateData.passwordHash = await bcrypt.hash(password, 10)
+                }
+
+                if (!user) {
+                    user = await tx.user.create({
+                        data: {
+                            email,
+                            name,
+                            passwordHash: password ? await bcrypt.hash(password, 10) : undefined,
+                            isActive: true
+                        }
+                    })
+                } else {
+                    await tx.user.update({
+                        where: { id: user.id },
+                        data: updateData
+                    })
+                }
+
+                // Upsert Troop Membership
+                const existingMember = await tx.troopMember.findUnique({
+                    where: { troopId_userId: { troopId: troop.id, userId: user!.id } }
+                })
+
+                if (existingMember) {
+                    await tx.troopMember.update({
+                        where: { id: existingMember.id },
+                        data: { role }
+                    })
+                } else {
+                    await tx.troopMember.create({
+                        data: {
+                            troopId: troop.id,
+                            userId: user!.id,
+                            role
+                        }
+                    })
+                }
+
+                // Auto-create Scout record if role is SCOUT
+                if (role === "SCOUT") {
+                    const existingScout = await tx.scout.findFirst({
+                        where: { userId: user!.id, troopId: troop.id }
+                    })
+
+                    if (!existingScout) {
+                        await tx.scout.create({
+                            data: {
+                                name,
+                                status: 'ACTIVE',
+                                userId: user!.id,
+                                troopId: troop.id
+                            }
+                        })
+                    }
+                }
+            })
+            results.importedCount++
+        } catch (error: any) {
+            results.failed++
+            results.errors.push(`Error importing ${userData.email}: ${error.message}`)
+        }
+    }
+
+    revalidatePath(`/dashboard/users`)
+    return { success: true, ...results }
+}
+
+export async function processRefund(campoutId: string, entityId: string, entityType: "SCOUT" | "ADULT", amount: string, method: "IBA_CREDIT" | "CASH", targetScoutId?: string) {
+    const session = await auth()
+    if (!session) return { error: "Unauthorized" }
+
+    const campout = await prisma.campout.findUnique({ where: { id: campoutId } })
+    if (!campout) return { error: "Campout not found" }
+
+    // Check Permissions (Admin/Financier/Leader)
+    const membership = await prisma.troopMember.findUnique({
+        where: {
+            troopId_userId: {
+                troopId: campout.troopId,
+                userId: session.user.id
+            }
+        }
+    })
+    const userRole = membership?.role || "SCOUT"
+    if (!["ADMIN", "FINANCIER", "LEADER"].includes(userRole)) {
+        return { error: "Unauthorized: Only Admins can process refunds." }
+    }
+
+    try {
+        const refundAmount = new Decimal(amount)
+        if (refundAmount.lte(0)) return { error: "Invalid amount" }
+
+        await prisma.$transaction(async (tx) => {
+            if (method === "IBA_CREDIT") {
+                const scoutToCredit = targetScoutId || (entityType === "SCOUT" ? entityId : null)
+                if (!scoutToCredit) throw new Error("A target scout must be specified for IBA credit.")
+
+                // 1. Create Transaction (IBA Deposit / Refund)
+                // We'll record it as IBA_DEPOSIT which credits the scout
+                await tx.transaction.create({
+                    data: {
+                        troopId: campout.troopId,
+                        type: "IBA_DEPOSIT", // Credits Scout
+                        amount: refundAmount,
+                        description: entityType === "ADULT"
+                            ? `Campout Refund (Overpayment) - Adult refund credited to Scout IBA`
+                            : `Campout Refund (Overpayment) - Credited to IBA`,
+                        campoutId: campoutId,
+                        scoutId: scoutToCredit, // The scout receiving the money
+                        userId: entityType === "ADULT" ? entityId : undefined, // The adult who was overpaid
+                        approvedBy: session.user.id,
+                        status: "APPROVED"
+                    }
+                })
+
+                // 2. Update Balance
+                await tx.scout.update({
+                    where: { id: scoutToCredit },
+                    data: { ibaBalance: { increment: refundAmount } }
+                })
+            } else {
+                // CASH Refund
+                // We record this as an EXPENSE (Money leaving the troop)
+                // This balances out the previous Income.
+                await tx.transaction.create({
+                    data: {
+                        troopId: campout.troopId,
+                        type: "EXPENSE",
+                        amount: refundAmount,
+                        description: `Campout Refund (Overpayment) - ${entityType === 'ADULT' ? 'Paid to Adult' : 'Paid to Scout/Parent'}`,
+                        campoutId: campoutId,
+                        userId: entityType === 'ADULT' ? entityId : undefined,
+                        scoutId: entityType === 'SCOUT' ? entityId : undefined,
+                        approvedBy: session.user.id,
+                        status: "APPROVED"
+                    }
+                })
+            }
+        })
+
+        revalidatePath(`/dashboard/campouts/${campoutId}`)
+        return { success: true, message: "Refund processed successfully" }
+    } catch (error: any) {
+        console.error("Refund Error:", error)
+        return { error: error.message || "Failed to process refund" }
+    }
+}

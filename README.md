@@ -1,57 +1,80 @@
-# TroopTreasury (Self-Hosted Edition)
+# TroopTreasury
 
-Modern, secure finance management for your scout troop.
+Secure, simple finance management for your scout troop. 
+Now with **Multi-Tenant Support** for managing multiple troops on a single instance!
 
 ## Features
-- **IBA Tracking**: Automatic balance management for every scout.
-- **Campout Management**: Registration and deposit tracking.
-- **Fundraising**: specialized tools for product sales and general campaigns.
-- **Financial Reports**: Built-in reports for transparency.
-- **Responsive Design**: Works great on mobile and desktop.
 
-## Quick Start (Docker)
+- **Multi-Tenant Architecture**: Each troop gets a dedicated workspace (`/dashboardtroop-slug/...`) with isolated data.
+- **Financial Management**: Track IBA balances, campout costs, and troop transactions.
+- **Fundraising**: Support for campaigns and product sales with automatic profit calculations.
+- **Role-Based Access Control**: Granular permissions (Admin, Financier, Leader, Scout, Parent).
+- **Subscription Management** (Hosted Mode): Built-in specialized billing, lifecycle states (Pause/Resume/Grace Period), and Stripe integration.
+- **Data Portability**: Full ZIP export of troop data.
 
-The easiest way to run TroopTreasury is using Docker Compose.
+## Deployment Modes
+
+### 1. Self-Hosted (Default)
+Ideal for a single troop deploying their own instance.
+- **Configuration**: No special setup needed.
+- **Behavior**: The root URL (`/`) behaves as the default troop dashboard.
+- **Billing**: Disabled.
+
+### 2. Hosted (SaaS Mode)
+For running a service supporting multiple troops.
+- **Configuration**: Set `NEXT_PUBLIC_IS_HOSTED=true`.
+- **Behavior**: Root URL is a marketing/landing page. Users register new troops via `/register`.
+- **Billing**: Enabled via Stripe.
+    - Requires `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID`.
+
+## Getting Started
 
 ### Prerequisites
-- [Docker](https://docs.docker.com/get-docker/)
-- [Docker Compose](https://docs.docker.com/compose/install/)
+- Node.js 18+
+- PostgreSQL database
 
 ### Installation
 
-1.  **Clone the repository** (or download the source).
-2.  **Generate a secret** for authentication:
-    ```bash
-    openssl rand -base64 32
-    ```
-3.  **Create a `.env` file** (or use the environment variables in `docker-compose.yml`):
-    ```env
-    AUTH_SECRET=your-random-secret
-    DATABASE_URL=postgresql://postgres:password@db:5432/trooptreasury?schema=public
-    ```
-4.  **Start the application**:
-    ```bash
-    docker-compose up -d
-    ```
-5.  **Access the app**: Open `http://localhost:3000` in your browser.
+1. Clone the repository
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Set up environment variables (`.env`):
+   ```bash
+   DATABASE_URL="postgresql://user:password@localhost:5432/troop_treasury"
+   AUTH_SECRET="your-secret-key"
+   
+   # Optional: Hosted Mode
+   # NEXT_PUBLIC_IS_HOSTED="true"
+   # STRIPE_SECRET_KEY="sk_test_..."
+   ```
+4. Initialize the database:
+   ```bash
+   npx prisma generate
+   npx prisma migrate dev
+   ```
+5. Run the development server:
+   ```bash
+   npm run dev
+   ```
 
-## Database Migrations
+## Architecture
 
-The application automatically runs database migrations on startup. If you need to run them manually:
+- **Framework**: Next.js 15 (App Router)
+- **Database**: PostgreSQL + Prisma ORM
+- **Auth**: NextAuth.js (v5)
+- **Styling**: Tailwind CSS + shadcn/ui
+- **Tenancy**: 
+    - **Troop Model**: Central entity for tenant isolation.
+    - **Middleware**: Resolves tenant context from URL path.
 
-```bash
-docker-compose exec app npx prisma db push
-```
+## 📘 Documentation
 
-## Initial Setup
+For a detailed guide on usage, see the **[User Guide](./USER_GUIDE.md)**.
 
-1.  Register the first user.
-2.  The system will automatically create the default troop and assign you as the administrator.
-3.  Invite other leaders and parents to join.
+## 🚀 Deployments
 
-## Support
-
-For issues and feature requests, please open an issue in the GitHub repository.
-
----
-&copy; 2026 TroopTreasury
+| Environment | Status | URL |
+| :--- | :--- | :--- |
+| **Production** | 🟢 Live | [https://trooptreasury.vercel.app](https://trooptreasury.vercel.app) |

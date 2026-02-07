@@ -20,7 +20,7 @@ RUN npm install -g tsx
 RUN DATABASE_URL="postgresql://user:pass@localhost:5432/db" npx prisma generate
 
 # Build the app. We run next build directly to avoid running DB migrations during the build.
-RUN npx next build
+RUN SKIP_ENV_VALIDATION=true npx next build
 
 # Production image, copy all the files and run next
 FROM node:24-alpine AS runner

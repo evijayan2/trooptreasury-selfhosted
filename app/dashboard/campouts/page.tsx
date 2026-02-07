@@ -16,6 +16,9 @@ import { Button } from "@/components/ui/button"
 import { Plus } from "lucide-react"
 import { notFound, redirect } from "next/navigation"
 
+import { PageHeader } from "@/components/dashboard/page-header"
+import { EmptyState } from "@/components/ui/empty-state"
+
 export const dynamic = 'force-dynamic'
 
 export default async function Page({ params }: { params: Promise<any> }) {
@@ -79,17 +82,43 @@ export default async function Page({ params }: { params: Promise<any> }) {
         })
 
     return (
-        <div className="max-w-6xl mx-auto space-y-8">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="flex flex-col gap-2">
-                    <h1 className="text-3xl font-bold">Campout Management</h1>
-                    <p className="text-gray-500">Plan and manage upcoming troop campouts and events.</p>
-                </div>
-                <div className="flex items-center gap-4">
+        <div className="max-w-6xl mx-auto space-y-12">
+            <PageHeader
+                title="Campout Management"
+                description="Plan and manage upcoming troop campouts and events."
+            >
+                {canEdit && (
+                    <Dialog>
+                        <DialogTrigger asChild>
+                            <Button size="lg" className="rounded-full shadow-lg hover:shadow-xl transition-all">
+                                <Plus className="mr-2 h-5 w-5" /> Schedule Campout
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-[500px]">
+                            <DialogHeader>
+                                <DialogTitle>Schedule Campout</DialogTitle>
+                                <DialogDescription>
+                                    Plan a new upcoming campout.
+                                </DialogDescription>
+                            </DialogHeader>
+                            <CampoutForm slug={slug} />
+                        </DialogContent>
+                    </Dialog>
+                )}
+            </PageHeader>
+
+            {sortedYears.length === 0 ? (
+                <EmptyState
+                    icon={Plus}
+                    title="No campouts scheduled"
+                    description="Get started by scheduling your first troop campout or event."
+                >
                     {canEdit && (
                         <Dialog>
                             <DialogTrigger asChild>
-                                <Button><Plus className="mr-2 h-4 w-4" /> Schedule Campout</Button>
+                                <Button variant="outline" size="lg" className="rounded-full">
+                                    Schedule First Campout
+                                </Button>
                             </DialogTrigger>
                             <DialogContent className="sm:max-w-[500px]">
                                 <DialogHeader>
@@ -102,33 +131,26 @@ export default async function Page({ params }: { params: Promise<any> }) {
                             </DialogContent>
                         </Dialog>
                     )}
-                </div>
-            </div>
-
-            {sortedYears.length === 0 ? (
-                <div className="text-center text-gray-500 py-8">No campouts scheduled.</div>
+                </EmptyState>
             ) : (
-                sortedYears.map(year => {
-                    // Logic for default expanded state:
-                    // - Current Year: Expanded
-                    // - Next Year (Near Future): Expanded
-                    // - Last Year (Near Past): Expanded
-                    // - All others: Collapsed
-                    const isDefaultOpen =
-                        year === currentYear ||
-                        year === currentYear + 1 ||
-                        year === currentYear - 1
+                <div className="space-y-10">
+                    {sortedYears.map(year => {
+                        const isDefaultOpen =
+                            year === currentYear ||
+                            year === currentYear + 1 ||
+                            year === currentYear - 1
 
-                    return (
-                        <CampoutYearGroup
-                            key={year}
-                            year={year}
-                            campouts={campoutsByYear[year]}
-                            defaultOpen={isDefaultOpen}
-                            slug={slug}
-                        />
-                    )
-                })
+                        return (
+                            <CampoutYearGroup
+                                key={year}
+                                year={year}
+                                campouts={campoutsByYear[year]}
+                                defaultOpen={isDefaultOpen}
+                                slug={slug}
+                            />
+                        )
+                    })}
+                </div>
             )}
         </div>
     )

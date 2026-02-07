@@ -1,10 +1,12 @@
+import { checkAndExpireEvents } from "@/app/actions/scheduler"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { notFound } from "next/navigation"
 import { PaymentsDueList } from "@/components/dashboard/payments-due-list"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from "next/link"
-import { Tent, DollarSign, Users } from "lucide-react"
+import { Tent, DollarSign, Users, Package } from "lucide-react"
+import { hasPermission } from "@/lib/rbac"
 
 export default async function TenantDashboard({ params }: { params: Promise<any> }) {
     const slug = "troop-1"
@@ -15,6 +17,9 @@ export default async function TenantDashboard({ params }: { params: Promise<any>
         where: { slug }
     })
     if (!troop) notFound()
+
+    // Auto-expire events if needed
+    await checkAndExpireEvents(troop.id)
 
     // Fetch user's own scout profile in this troop
     const userScout = await prisma.scout.findFirst({
@@ -34,6 +39,17 @@ export default async function TenantDashboard({ params }: { params: Promise<any>
     const myScouts = userScout ? [userScout, ...childScouts] : [...childScouts]
     // Remove duplicates if any (though unlikely with proper data)
     const uniqueScouts = Array.from(new Map(myScouts.map(s => [s.id, s])).values())
+
+    // Fetch membership to check role
+    const membership = await prisma.troopMember.findUnique({
+        where: {
+            troopId_userId: {
+                troopId: troop.id,
+                userId: session.user.id
+            }
+        }
+    })
+    const role = membership?.role || "SCOUT"
 
     return (
         <div className="space-y-6 sm:space-y-8">
@@ -87,38 +103,57 @@ export default async function TenantDashboard({ params }: { params: Promise<any>
 
             {/* Quick Links */}
             <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-                <Link href={`/dashboard/campouts`}>
-                    <Card className="hover:bg-muted/50 transition-colors cursor-pointer h-full">
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2"><Tent className="h-5 w-5" /> Campouts</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            View upcoming campouts and register.
-                        </CardContent>
-                    </Card>
-                </Link>
+                {role && (await hasPermission(role, 'VIEW_CAMPOUTS', troop.id)) && (
+                    <Link href={`/dashboard/campouts`}>
+                        <Card className="hover:bg-muted/50 transition-colors cursor-pointer h-full">
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2"><Tent className="h-5 w-5" /> Campouts</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                View upcoming campouts and register.
+                            </CardContent>
+                        </Card>
+                    </Link>
+                )}
 
-                <Link href={`/dashboard/finance`}>
-                    <Card className="hover:bg-muted/50 transition-colors cursor-pointer h-full">
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2"><DollarSign className="h-5 w-5" /> Finance</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            Manage transactions and view reports.
-                        </CardContent>
-                    </Card>
-                </Link>
+                {role && (await hasPermission(role, 'VIEW_FINANCE_MGMT', troop.id)) && (
+                    <Link href={`/dashboard/finance`}>
+                        <Card className="hover:bg-muted/50 transition-colors cursor-pointer h-full">
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2"><DollarSign className="h-5 w-5" /> Finance</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                Manage transactions and view reports.
+                            </CardContent>
+                        </Card>
+                    </Link>
+                )}
 
-                <Link href={`/dashboard/users`}>
-                    <Card className="hover:bg-muted/50 transition-colors cursor-pointer h-full">
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2"><Users className="h-5 w-5" /> Members</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            View troop roster and contacts.
-                        </CardContent>
-                    </Card>
-                </Link>
+                {role && (await hasPermission(role, 'VIEW_FUNDRAISING', troop.id)) && (
+                    <Link href={`/dashboard/my-fundraising`}>
+                        <Card className="hover:bg-muted/50 transition-colors cursor-pointer h-full">
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2"><Package className="h-5 w-5" /> My Fundraising</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                Participate in active troop campaigns.
+                            </CardContent>
+                        </Card>
+                    </Link>
+                )}
+
+                {role && (await hasPermission(role, 'VIEW_USERS', troop.id)) && (
+                    <Link href={`/dashboard/users`}>
+                        <Card className="hover:bg-muted/50 transition-colors cursor-pointer h-full">
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2"><Users className="h-5 w-5" /> Members</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                View troop roster and contacts.
+                            </CardContent>
+                        </Card>
+                    </Link>
+                )}
             </div>
         </div>
     )

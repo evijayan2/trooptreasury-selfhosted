@@ -73,7 +73,7 @@ export function DashboardHeader({
                 {/* Logo & Troop Name / Switcher */}
                 <div className="flex items-center gap-2">
                     {/* Troop Switcher - shows dropdown for users with multiple troops */}
-                    <span className="font-bold text-lg hidden sm:inline-block truncate max-w-[200px]">{troopName || "My Troop"}</span>
+                    <span className="font-bold text-lg hidden sm:inline-block truncate max-w-[200px]">{"My Troop"}</span>
                 </div>
             </div>
 

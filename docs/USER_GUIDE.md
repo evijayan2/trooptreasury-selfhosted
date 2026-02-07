@@ -150,4 +150,4 @@ A: Cash payments require manual verification. Please allow a few days for the Tr
 A: The system prevents overpayment on specific line items, but if a correction is made (e.g., campout cost drops), the difference can be credited back to your IBA by an Admin.
 
 **Q: Why hasn't my scout's balance gone up after selling Popcorn?**
-A: If it is a **Product Sale** campaign, the funds are not credited until the campaign is officially **CLOSED** by the Treasurer. This ensures all inventory is accounted for before payouts occur.
+A: If it is a **Product Sale** campaign, the funds are not credited until the campaign is officially **CLOSED** by the Treasurer. This ensures all inventory is accounted for before payouts occur. When the campaign closes, your scout will receive a notification showing their earnings.

@@ -9,11 +9,26 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import { formatCurrency } from "@/lib/utils"
+import { formatCurrency, cn } from "@/lib/utils"
 
 interface FinancialReportProps {
-    transactions: any[]
-    expenses: any[]
+    transactions: {
+        id: string
+        type: string
+        status: string
+        amount: string | number
+        description: string | null
+        createdAt: Date | string
+        userId?: string | null
+        user?: { name: string } | null
+        scout?: { name: string } | null
+    }[]
+    expenses: {
+        id: string
+        amount: string | number
+        adultId: string
+        adult?: { name: string } | null
+    }[]
 }
 
 export function FinancialReport({ transactions, expenses }: FinancialReportProps) {
@@ -34,11 +49,18 @@ export function FinancialReport({ transactions, expenses }: FinancialReportProps
         .filter(t => t.type.startsWith("TROOP") && t.status === "APPROVED")
         .reduce((sum, t) => sum + Number(t.amount), 0)
 
-    const totalIncome = ibaIncome + cashIncome + subsidyIncome + organizerCash
+    const totalIncomeGross = ibaIncome + cashIncome + subsidyIncome + organizerCash
 
-    // 2. Calculate Expenses
+    // 2. Calculate Refunds
+    const totalRefunds = transactions
+        .filter(t => (t.type === "EXPENSE" || t.type === "IBA_DEPOSIT") && t.description?.includes("Refund") && t.status === "APPROVED")
+        .reduce((sum, t) => sum + Number(t.amount), 0)
+
+    const totalIncome = totalIncomeGross - totalRefunds
+
+    // 3. Calculate Expenses
     const directExpenses = transactions
-        .filter(t => t.type === "EXPENSE" && t.status === "APPROVED")
+        .filter(t => t.type === "EXPENSE" && !t.description?.includes("Refund") && t.status === "APPROVED")
         .reduce((sum, t) => sum + Number(t.amount), 0)
 
     const totalExpenses = expenses.reduce((sum, e) => sum + Number(e.amount), 0) + directExpenses
@@ -70,18 +92,38 @@ export function FinancialReport({ transactions, expenses }: FinancialReportProps
 
     // 4. Detailed Payment Log
     const paymentLog = transactions
-        .filter(t => (["CAMP_TRANSFER", "EVENT_PAYMENT", "REGISTRATION_INCOME"].includes(t.type) || t.type.startsWith("TROOP")) && t.status === "APPROVED")
-        .map(t => ({
-            id: t.id,
-            date: t.createdAt,
-            // Try to find name: scout name OR user name
-            // If it's an IBA transfer for an adult, show both
-            name: t.user?.name && t.scout?.name && t.type === "CAMP_TRANSFER"
-                ? `${t.user.name} (from ${t.scout.name} IBA)`
-                : (t.scout?.name || t.user?.name || "Unknown"),
-            amount: Number(t.amount),
-            type: t.type === "CAMP_TRANSFER" ? "IBA Transfer" : t.type.startsWith("TROOP") ? "Troop Subsidy" : "Cash/Direct"
-        }))
+        .filter(t => {
+            const isIncoming = (["CAMP_TRANSFER", "EVENT_PAYMENT", "REGISTRATION_INCOME", "TROOP_PAYMENT"].includes(t.type) || t.type.startsWith("TROOP")) && !t.description?.includes("Refund")
+            const isRefund = (t.type === "EXPENSE" || t.type === "IBA_DEPOSIT") && t.description?.includes("Refund")
+            return (isIncoming || isRefund) && t.status === "APPROVED"
+        })
+        .map(t => {
+            const isRefund = t.description?.includes("Refund")
+            let method = t.type === "CAMP_TRANSFER" ? "IBA Transfer" : t.type.startsWith("TROOP") ? "Troop Subsidy" : "Cash/Direct"
+
+            if (t.type === "EVENT_PAYMENT" && t.description?.includes("Held by")) {
+                const holder = t.description.split("Held by ")[1]?.replace(")", "")
+                method = holder ? `Cash (Held by ${holder})` : "Cash (Org Held)"
+            } else if (t.type === "REGISTRATION_INCOME" && t.description?.includes("via")) {
+                const collector = t.description.split("via ")[1]?.replace(")", "")
+                method = collector ? `Cash (to Bank via ${collector})` : "Cash (to Bank)"
+            }
+
+            if (isRefund) {
+                method = t.type === "IBA_DEPOSIT" ? "IBA Refund" : "Cash Refund"
+            }
+
+            return {
+                id: t.id,
+                date: t.createdAt,
+                name: t.user?.name && t.scout?.name && t.type === "CAMP_TRANSFER"
+                    ? `${t.user.name} (from ${t.scout.name} IBA)`
+                    : (t.scout?.name || t.user?.name || "Unknown"),
+                amount: isRefund ? -Number(t.amount) : Number(t.amount),
+                type: method,
+                isRefund
+            }
+        })
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
     return (
@@ -101,6 +143,7 @@ export function FinancialReport({ transactions, expenses }: FinancialReportProps
                             <span>Cash (Bank): {formatCurrency(cashIncome)}</span>
                             {subsidyIncome > 0 && <span>Subsidy: {formatCurrency(subsidyIncome)}</span>}
                             {organizerCash > 0 && <span>Org. Cash: {formatCurrency(organizerCash)}</span>}
+                            {totalRefunds > 0 && <span className="text-amber-600 border-t pt-1 mt-1">Refunds: -{formatCurrency(totalRefunds)}</span>}
                         </div>
                     </CardContent>
                 </Card>
@@ -187,9 +230,11 @@ export function FinancialReport({ transactions, expenses }: FinancialReportProps
                                     ) : (
                                         paymentLog.map((p) => (
                                             <TableRow key={p.id}>
-                                                <TableCell className="font-medium">{p.name}</TableCell>
+                                                <TableCell className={cn("font-medium", p.isRefund && "text-amber-600")}>{p.name}</TableCell>
                                                 <TableCell className="text-xs text-gray-500">{p.type}</TableCell>
-                                                <TableCell className="text-right">{formatCurrency(p.amount)}</TableCell>
+                                                <TableCell className={cn("text-right", p.isRefund && "text-amber-600 font-bold")}>
+                                                    {p.amount < 0 ? `-${formatCurrency(Math.abs(p.amount))}` : formatCurrency(p.amount)}
+                                                </TableCell>
                                             </TableRow>
                                         ))
                                     )}

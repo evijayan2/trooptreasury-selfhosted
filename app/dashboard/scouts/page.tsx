@@ -48,6 +48,8 @@ export default async function Page({ params }: { params: Promise<any> }) {
             }
         })
         if (scout) {
+            // Always redirect SCOUT to their detail page (which shows transaction history)
+            // This handles both the "Transactions" menu click (view=transactions) and direct access
             redirect(`/dashboard/scouts/${scout.id}`)
         }
         return (

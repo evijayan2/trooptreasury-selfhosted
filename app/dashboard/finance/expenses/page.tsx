@@ -23,6 +23,7 @@ export default async function ExpensesPage({ params }: { params: Promise<any> })
     if (!troop) return <div>Troop not found</div>
 
     // 2. Check Permissions (Tenant-Aware)
+    let memberRole: string = "SCOUT"
     let isAdmin = false
     if (session?.user?.id) {
         const member = await prisma.troopMember.findUnique({
@@ -33,7 +34,8 @@ export default async function ExpensesPage({ params }: { params: Promise<any> })
                 }
             }
         })
-        isAdmin = ["ADMIN", "FINANCIER"].includes(member?.role || "")
+        memberRole = member?.role || "SCOUT"
+        isAdmin = ["ADMIN", "FINANCIER"].includes(memberRole)
     }
 
     // Fetch options for the form - SCOPED TO TROOP
@@ -82,7 +84,10 @@ export default async function ExpensesPage({ params }: { params: Promise<any> })
         troopId: troop.id // Base Scope
     }
 
-    if (session?.user?.role === 'PARENT' && session?.user?.id) {
+    // Admins, Financiers, and Leaders see all troop transactions
+    if (["ADMIN", "FINANCIER", "LEADER"].includes(memberRole)) {
+        // No additional filters, just troopId
+    } else if (memberRole === 'PARENT' && session?.user?.id) {
         whereClause.scout = {
             parentLinks: {
                 some: {
@@ -90,7 +95,13 @@ export default async function ExpensesPage({ params }: { params: Promise<any> })
                 }
             }
         }
-    } else if (["SCOUT"].includes(session?.user?.role || "")) {
+    } else if (memberRole === "SCOUT" && session?.user?.id) {
+        // Scouts see their own transactions
+        whereClause.scout = {
+            userId: session.user.id
+        }
+    } else {
+        // Fallback or unauthenticated
         whereClause.id = "nothing"
     }
 
@@ -206,11 +217,11 @@ export default async function ExpensesPage({ params }: { params: Promise<any> })
                                         <Badge variant={['APPROVED', 'PENDING'].includes(t.status) ? "outline" : "destructive"}>
                                             {t.status}
                                         </Badge>
-                                        <span className={`font-bold ${['EXPENSE', 'REIMBURSEMENT', 'CAMP_TRANSFER'].includes(t.type)
+                                        <span className={`font-bold ${['EXPENSE', 'REIMBURSEMENT', 'CAMP_TRANSFER', 'INTERNAL_TRANSFER'].includes(t.type)
                                             ? "text-red-600"
                                             : "text-green-600"
                                             }`}>
-                                            {['EXPENSE', 'REIMBURSEMENT', 'CAMP_TRANSFER'].includes(t.type) ? "-" : "+"}${Number(t.amount).toFixed(2)}
+                                            {['EXPENSE', 'REIMBURSEMENT', 'CAMP_TRANSFER', 'INTERNAL_TRANSFER'].includes(t.type) ? "-" : "+"}${Number(t.amount).toFixed(2)}
                                         </span>
                                     </div>
                                 </div>

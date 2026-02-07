@@ -1,11 +1,13 @@
 "use client"
 
-import { usePathname } from "next/navigation"
+import { usePathname, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { ChevronRight, Home } from "lucide-react"
 
 export function Breadcrumbs() {
     const pathname = usePathname()
+    const searchParams = useSearchParams()
+    const view = searchParams.get("view")
     const pathSegments = pathname.split("/").filter(segment => segment !== "")
     console.log("Breadcrumbs - Pathname:", pathname)
     console.log("Breadcrumbs - Segments:", pathSegments)
@@ -26,58 +28,51 @@ export function Breadcrumbs() {
     const homeHref = "/dashboard"
 
     return (
-        <nav aria-label="Breadcrumb" className="mb-4 flex items-center text-sm text-gray-500 dark:text-gray-400">
-            <ol className="flex items-center gap-1">
+        <nav aria-label="Breadcrumb" className="mb-6 flex items-center text-sm font-medium text-muted-foreground/60">
+            <ol className="flex items-center gap-1.5">
                 {/* Home / Dashboard Root */}
                 <li className="flex items-center">
                     <Link
                         href={homeHref}
-                        className="flex items-center gap-1 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
+                        className="flex items-center gap-1.5 hover:text-foreground transition-colors"
                     >
-                        <Home className="w-4 h-4" />
+                        <Home className="w-3.5 h-3.5" />
                         <span>Dashboard</span>
                     </Link>
                 </li>
 
                 {pathSegments.map((segment, index) => {
                     // Smart filtering for tenant routes
-                    // If we are in /dashboard/..., we want to skip 't', [slug], and 'dashboard'
-                    // Check if strict segment is 't' or 'dashboard' or matches our general heuristic
                     if (segment === "dashboard" && index === 0) return null
-
-                    // If previous segment was 't', this is likely the slug, so skip it
                     if (index > 0 && pathSegments[index - 1] === "t") return null
-
 
                     const href = "/" + pathSegments.slice(0, index + 1).join("/")
                     const isLast = index === pathSegments.length - 1
 
-                    // Try to make label readable
-                    // If it looks like a CUID/UUID, shorten it or show generic "Details"?
-                    // Or keep it as is if we can't fetch the name easily client-side without layout data.
-                    // For now, let's check strict map, otherwise capitalize or show segment.
                     let label = segmentLabels[segment]
+                    if (segment === "scouts" && view === "transactions") {
+                        label = "Transactions"
+                    }
+
                     if (!label) {
-                        // Check if it looks like an ID (long alphanumeric)
                         if (segment.length > 20 && /\d/.test(segment)) {
                             label = "Details"
                         } else {
-                            // Capitalize
                             label = segment.charAt(0).toUpperCase() + segment.slice(1).replace(/-/g, " ")
                         }
                     }
 
                     return (
-                        <li key={href} className="flex items-center gap-1">
-                            <ChevronRight className="w-4 h-4 text-gray-400" />
+                        <li key={href} className="flex items-center gap-1.5">
+                            <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/30" />
                             {isLast ? (
-                                <span className="font-medium text-gray-900 dark:text-gray-100 px-1 border-b border-transparent">
+                                <span className="text-foreground font-semibold">
                                     {label}
                                 </span>
                             ) : (
                                 <Link
                                     href={href}
-                                    className="hover:text-gray-900 dark:hover:text-gray-100 transition-colors px-1"
+                                    className="hover:text-foreground transition-colors"
                                 >
                                     {label}
                                 </Link>

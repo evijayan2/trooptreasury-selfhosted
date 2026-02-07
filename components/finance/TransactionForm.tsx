@@ -121,7 +121,7 @@ export function TransactionForm({ triggerButton, scouts, campouts, categories, c
     // Dynamic field filtering based on type
     const showBudget = ["EXPENSE", "REGISTRATION_INCOME", "CAMP_TRANSFER", "REIMBURSEMENT"].includes(type)
     const showCampaign = ["FUNDRAISING_INCOME"].includes(type)
-    const showScout = ["DUES", "FUNDRAISING_INCOME", "EVENT_PAYMENT", "IBA_RECLAIM"].includes(type)
+    const showScout = ["DUES", "FUNDRAISING_INCOME", "EVENT_PAYMENT", "IBA_RECLAIM", "INTERNAL_TRANSFER"].includes(type)
     const showCampout = ["EVENT_PAYMENT", "EXPENSE", "REGISTRATION_INCOME", "CAMP_TRANSFER"].includes(type)
 
     // Show Payment Method for DUES
@@ -160,6 +160,7 @@ export function TransactionForm({ triggerButton, scouts, campouts, categories, c
                                     <SelectItem value="DUES">Dues Payment</SelectItem>
                                     <SelectItem value="EVENT_PAYMENT">Event Payment</SelectItem>
                                     <SelectItem value="REIMBURSEMENT">Reimbursement</SelectItem>
+                                    <SelectItem value="INTERNAL_TRANSFER">Troop to Scout Transfer</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>

@@ -85,7 +85,8 @@ export default async function IBASetupPage({ params }: { params: Promise<any> })
                     <CardTitle>Important Notes</CardTitle>
                 </CardHeader>
                 <CardContent className="text-sm space-y-2 text-muted-foreground">
-                    <p>• Deposits will be logged with the "IBA_DEPOSIT" type.</p>
+                    <p>• Deposits will be recorded as "Troop to Scout Transfers".</p>
+                    <p>• This treats the funds as allocated from Troop assets, not new income.</p>
                     <p>• This action is atomic; all deposits in a batch are processed together.</p>
                     <p>• Each deposit will immediately increment the scout's current IBA balance.</p>
                     <p>• You can review these in the "Expenses" or "Overview" ledger after submitting.</p>

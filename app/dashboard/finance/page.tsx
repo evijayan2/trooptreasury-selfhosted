@@ -100,13 +100,28 @@ export default async function FinancePage({ params }: { params: Promise<any> }) 
             case 'EXPENSE':
             case 'REIMBURSEMENT':
             case 'TROOP_PAYMENT':
-                troopExpenses += val
-                troopList.push({ id: t.id, description: t.description || "No Description", amount: -val, date: dateStr })
-                expenseList.push({ id: t.id, description: t.description || "No Description", amount: val, date: dateStr })
+                // IMPORTANT: Pocket reimbursements (Cash Collection Credit) do NOT touch the bank.
+                // They only account for cash already held by organizers.
+                const isPocketCredit = t.type === 'REIMBURSEMENT' && t.description?.includes("Cash Collection Credit")
+
+                if (!isPocketCredit) {
+                    troopExpenses += val
+                    troopList.push({ id: t.id, description: t.description || "No Description", amount: -val, date: dateStr })
+                    expenseList.push({ id: t.id, description: t.description || "No Description", amount: val, date: dateStr })
+                } else {
+                    // This is still an "organizer" transaction, but not a bank one.
+                    // We can add it to the organizer cash list as an "offset" if it were a payout, 
+                    // but here it's actually the CREDIT for receiving cash.
+                }
                 break
             case 'IBA_DEPOSIT':
                 ibaDepositsTotal += val
                 reserveList.push({ id: t.id, description: `${t.description}`, amount: val, date: dateStr })
+                break
+            case 'INTERNAL_TRANSFER':
+                troopExpenses += val
+                ibaDepositsTotal += val
+                troopList.push({ id: t.id, description: t.description || "Internal Transfer", amount: -val, date: dateStr })
                 break
             default:
                 break

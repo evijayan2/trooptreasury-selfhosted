@@ -8,7 +8,6 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Permission, DEFAULT_PERMISSIONS } from "@/lib/rbac-shared"
 import { Role } from "@prisma/client"
-
 const ALL_PERMISSIONS: Permission[] = [
     "VIEW_DASHBOARD",
     "VIEW_SCOUTS",
@@ -22,7 +21,8 @@ const ALL_PERMISSIONS: Permission[] = [
     "MANAGE_USERS",
     "VIEW_FUNDRAISING",
     "MANAGE_FUNDRAISING",
-    "VIEW_BILLING"
+    "VIEW_BILLING",
+    "VIEW_FINANCE_MGMT"
 ]
 
 const ALL_ROLES: Role[] = ["FINANCIER", "LEADER", "PARENT", "SCOUT" /* Admin is always full access */]
@@ -80,12 +80,18 @@ export function RolePermissionEditor({
                                         <td className="px-4 py-3 font-medium">{perm.replace(/_/g, " ")}</td>
                                         {ALL_ROLES.map(role => {
                                             const active = (permissions[role] || []).includes(perm)
+                                            const isForbidden = role === 'SCOUT' && perm === 'VIEW_FINANCE_MGMT'
+
                                             return (
                                                 <td key={`${role}-${perm}`} className="px-4 py-3 text-center">
-                                                    <Checkbox
-                                                        checked={active}
-                                                        onCheckedChange={() => togglePermission(role, perm)}
-                                                    />
+                                                    {!isForbidden ? (
+                                                        <Checkbox
+                                                            checked={active}
+                                                            onCheckedChange={() => togglePermission(role, perm)}
+                                                        />
+                                                    ) : (
+                                                        <span className="text-xs text-muted-foreground italic">Restricted</span>
+                                                    )}
                                                 </td>
                                             )
                                         })}

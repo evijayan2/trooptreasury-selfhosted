@@ -126,3 +126,31 @@ export async function notifyTroopScouts(troopId: string, title: string, message:
         console.error("Failed to notify troop scouts:", error)
     }
 }
+
+// Helper to notify only leadership (Admin/Financier)
+export async function notifyTroopLeadership(troopId: string, title: string, message: string, link?: string) {
+    try {
+        const members = await prisma.troopMember.findMany({
+            where: {
+                troopId,
+                role: { in: ['ADMIN', 'FINANCIER'] }
+            },
+            select: { userId: true }
+        })
+
+        if (members.length === 0) return
+
+        await prisma.notification.createMany({
+            data: members.map(m => ({
+                userId: m.userId,
+                title,
+                message,
+                link,
+                type: 'INFO',
+                read: false
+            }))
+        })
+    } catch (error) {
+        console.error("Failed to notify troop leadership:", error)
+    }
+}

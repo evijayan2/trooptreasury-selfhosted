@@ -31,13 +31,15 @@ export function ExpenseLogger({
     adults = [],
     allAdults = [],
     currentUserId,
-    userRole
+    userRole,
+    isOrganizer = false
 }: {
     campoutId: string
     adults?: any[]
     allAdults?: any[]
     currentUserId?: string
     userRole?: string
+    isOrganizer?: boolean
 }) {
     const [open, setOpen] = useState(false)
     const [error, setError] = useState("")
@@ -75,14 +77,7 @@ export function ExpenseLogger({
         }
     }
 
-    const canLogForTroop = ["ADMIN", "FINANCIER", "LEADER"].includes(userRole || "")
-    const isAdminOrFinancier = ["ADMIN", "FINANCIER"].includes(userRole || "")
-
-    // For Admin/Financier, show all adult users (excluding scouts)
-    // For others, show only campout adults
-    const adultsToShow = isAdminOrFinancier
-        ? allAdults.filter(a => a.role !== 'SCOUT')
-        : adults
+    const canLogForTroop = isOrganizer || ["ADMIN", "FINANCIER", "LEADER"].includes(userRole || "")
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
@@ -126,17 +121,14 @@ export function ExpenseLogger({
                                 {canLogForTroop && (
                                     <>
                                         <SelectItem value="TROOP">Troop Treasury (IBA)</SelectItem>
-                                        {isAdminOrFinancier ? (
-                                            // Show all adults except current user
-                                            adultsToShow.filter(a => a.id !== currentUserId).map(a => (
+                                        {/* Show all adults except current user */}
+                                        {allAdults
+                                            .filter(a => a.id !== currentUserId)
+                                            .sort((a, b) => (a.name || "").localeCompare(b.name || ""))
+                                            .map(a => (
                                                 <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
                                             ))
-                                        ) : (
-                                            // Show only campout adults except current user
-                                            adults.filter(a => a.adultId !== currentUserId).map(a => (
-                                                <SelectItem key={a.adult.id} value={a.adult.id}>{a.adult.name}</SelectItem>
-                                            ))
-                                        )}
+                                        }
                                     </>
                                 )}
                             </SelectContent>

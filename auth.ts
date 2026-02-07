@@ -5,6 +5,7 @@ import Credentials from "next-auth/providers/credentials"
 import { z } from "zod"
 import bcrypt from "bcryptjs"
 import { authConfig } from "./auth.config"
+import { env } from "@/lib/env"
 
 
 export const { handlers, auth, signIn, signOut } = NextAuth({

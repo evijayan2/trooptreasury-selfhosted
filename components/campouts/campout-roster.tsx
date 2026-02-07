@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select"
 import { Plus } from "lucide-react"
 import { RemoveParticipantButton } from "./remove-participant-button"
+import { RefundButton } from "./refund-button"
 import { IBAPayment } from "./iba-payment"
 import { PaymentRecorder } from "./payment-recorder"
 import { formatCurrency } from "@/lib/utils"
@@ -31,14 +32,16 @@ export function CampoutRoster({
     allScouts,
     canEdit = false,
     costPerPerson = 0,
-    campoutStatus = "OPEN"
+    campoutStatus = "OPEN",
+    slug
 }: {
     campoutId: string,
     registeredScouts: any[],
     allScouts: any[],
     canEdit?: boolean,
     costPerPerson?: number,
-    campoutStatus?: string
+    campoutStatus?: string,
+    slug?: string
 }) {
     const [selectedScout, setSelectedScout] = useState<string>("")
     const [open, setOpen] = useState(false)
@@ -48,7 +51,7 @@ export function CampoutRoster({
 
     const handleRegister = async () => {
         if (!selectedScout) return
-        const result = await registerScoutForCampout(campoutId, selectedScout)
+        const result = await registerScoutForCampout(campoutId, selectedScout, slug)
         if (result.success) {
             setOpen(false)
             setSelectedScout("")
@@ -58,7 +61,7 @@ export function CampoutRoster({
         }
     }
 
-    const canModifyRoster = canEdit && campoutStatus === "OPEN"
+    const canModifyRoster = canEdit && (campoutStatus === "OPEN" || campoutStatus === "READY_FOR_PAYMENT")
 
     return (
         <div className="space-y-4">
@@ -100,14 +103,28 @@ export function CampoutRoster({
                 <p className="text-sm text-gray-500">No scouts registered yet.</p>
             ) : (
                 <ul className="space-y-2">
-                    {registeredScouts.map(({ scout, isPaid, remainingDue = costPerPerson }) => (
+                    {registeredScouts.map(({ scout, isPaid, remainingDue = costPerPerson, overpaidAmount = 0 }) => (
                         <li key={scout.id} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-muted rounded text-sm">
                             <div className="flex items-center gap-2">
                                 <span>{scout.name}</span>
                                 {canModifyRoster && <RemoveParticipantButton campoutId={campoutId} id={scout.id} type="SCOUT" />}
                             </div>
                             <div className="flex items-center gap-2">
-                                {isPaid ? (
+                                {overpaidAmount > 0 ? (
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs text-amber-600 font-semibold">Refund Due: {formatCurrency(overpaidAmount)}</span>
+                                        {canEdit && (
+                                            <RefundButton
+                                                campoutId={campoutId}
+                                                entityId={scout.id}
+                                                entityType="SCOUT"
+                                                refundAmount={overpaidAmount}
+                                                entityName={scout.name}
+                                                hasIbaAccount={true}
+                                            />
+                                        )}
+                                    </div>
+                                ) : isPaid ? (
                                     <span className="px-2 py-0.5 bg-green-200 text-green-800 rounded text-xs font-bold">PAID</span>
                                 ) : (
                                     <span className="text-xs text-red-500 font-semibold">{formatCurrency(remainingDue)} Due</span>

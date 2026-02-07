@@ -25,7 +25,8 @@ const TRANSACTION_TYPES = [
     "CAMP_TRANSFER",
     "REIMBURSEMENT",
     "DUES",
-    "IBA_RECLAIM"
+    "IBA_RECLAIM",
+    "INTERNAL_TRANSFER"
 ]
 
 export function TransactionForm({ onClose, scouts = [] }: { onClose?: () => void, scouts?: any[] }) {
