@@ -38,7 +38,11 @@ const prisma = new PrismaClient({ adapter })
 async function main() {
     try {
         const email = 'admin@example.com';
-        const password = 'TroopTreasury2026!';
+        const password = process.env.ADMIN_PASSWORD;
+
+        if (!password) {
+            throw new Error('ADMIN_PASSWORD environment variable is not set.');
+        }
         const hashedPassword = await bcrypt.hash(password, 10);
 
         const user = await prisma.user.upsert({

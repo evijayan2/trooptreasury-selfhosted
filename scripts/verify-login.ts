@@ -6,7 +6,7 @@ dotenv.config({ path: '.env.prod' })
 
 const connectionString = process.env.DATABASE_URL || process.env.PROD_DATABASE_URL
 const email = 'system@trooptreasury.com'
-const password = 'TroopTreasury2026!'
+const password = process.env.ADMIN_PASSWORD || 'TroopTreasury2026!' // Fallback for safety, but should be env
 
 async function main() {
     console.log("=== Start Login Verification ===")

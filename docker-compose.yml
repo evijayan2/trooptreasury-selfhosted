@@ -33,9 +33,9 @@ services:
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       
       # Initial Setup
-      TROOP_NAME: ${TROOP_NAME:-Troop 79}
-      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-TroopTreasury2026!}
+      TROOP_NAME: ${TROOP_NAME:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
     ports:
       - "3000:3000"
     depends_on:

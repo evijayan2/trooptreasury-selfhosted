@@ -12,7 +12,12 @@ const prisma = new PrismaClient({ adapter })
 
 async function main() {
     const email = process.env.ADMIN_EMAIL || 'admin@example.com'
-    const password = process.env.ADMIN_PASSWORD || 'TroopTreasury2026!' // Meets new password requirements
+    const password = process.env.ADMIN_PASSWORD
+
+    if (!password) {
+        throw new Error('ADMIN_PASSWORD environment variable is not set. Please set it in your .env file.')
+    }
+
     const hashedPassword = await bcrypt.hash(password, 10)
 
     // 1. Create Default Troop

@@ -24,8 +24,9 @@ test.describe.serial('Demo Recording', () => {
         // Handle login if not authenticated
         const isLogin = await page.isVisible('input[name="email"]');
         if (isLogin) {
-            await page.fill('input[name="email"]', 'admin@example.com');
-            await page.fill('input[name="password"]', 'TroopTreasury2026!');
+            await page.fill('input[name="email"]', process.env.ADMIN_EMAIL || 'admin@example.com');
+            const password = process.env.ADMIN_PASSWORD || 'TroopTreasury2026!';
+            await page.fill('input[name="password"]', password);
 
             // Try to click Submit
             const submitBtn = page.locator('button[type="submit"]');
