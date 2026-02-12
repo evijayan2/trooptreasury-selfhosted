@@ -10,19 +10,20 @@ import { Loader2, Plus } from "lucide-react"
 interface JoinCampoutButtonProps {
     campoutId: string
     scoutId: string
+    className?: string
 }
 
-export function JoinCampoutButton({ campoutId, scoutId }: JoinCampoutButtonProps) {
+export function JoinCampoutButton({ campoutId, scoutId, className }: JoinCampoutButtonProps) {
     const [loading, setLoading] = useState(false)
 
     const handleJoin = async () => {
         setLoading(true)
         try {
             const result = await registerScoutForCampout(campoutId, scoutId)
-            if (result.success) {
-                toast.success("You have joined the campout!")
-            } else {
+            if ("error" in result) {
                 toast.error(result.error)
+            } else {
+                toast.success("You have joined the campout!")
             }
         } catch (error) {
             toast.error("Failed to join campout")
@@ -32,7 +33,7 @@ export function JoinCampoutButton({ campoutId, scoutId }: JoinCampoutButtonProps
     }
 
     return (
-        <Button onClick={handleJoin} disabled={loading} size="sm">
+        <Button onClick={handleJoin} disabled={loading} size="sm" className={className}>
             {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Plus className="w-4 h-4 mr-2" />}
             Join Campout
         </Button>

@@ -10,24 +10,9 @@ echo "🚀 Starting Vercel build process..."
 echo "📦 Generating Prisma Client..."
 npx prisma generate
 
-# Run migrations in production mode (safe - no reset)
-if [ "$VERCEL_ENV" = "production" ]; then
-  echo "🔄 Running production database migrations..."
-  npx prisma migrate deploy
-elif [ "$VERCEL_ENV" = "preview" ]; then
-  echo "🔄 Running preview database migrations..."
-  npx prisma migrate deploy
-else
-  echo "🔄 Running development database migrations..."
-  # For development, we can use migrate dev
-  npx prisma migrate dev --name auto_migration || npx prisma migrate deploy
-fi
-
-# Run seed if needed (optional)
-if [ "$VERCEL_ENV" = "production" ] && [ "$RUN_SEED" = "true" ]; then
-  echo "🌱 Running database seed..."
-  npx prisma db seed
-fi
+# Run migrations and seed safely using db-migrate.js
+echo "🔄 Running database migrations..."
+node scripts/db-migrate.js
 
 # Build Next.js application
 echo "🏗️  Building Next.js application..."

@@ -1,1 +1,0 @@
-components/fundraising/DirectSalesVolunteerView.tsx(114,17): error TS1005: ')' expected.

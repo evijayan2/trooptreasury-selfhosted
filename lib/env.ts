@@ -36,11 +36,12 @@ export function validateEnv() {
     return envSchema.parse(process.env);
   } catch (error) {
     if (error instanceof z.ZodError) {
-      console.error("❌ Invalid environment variables:");
-      error.issues.forEach((err) => {
-        console.error(`  ${err.path.join(".")}: ${err.message}`);
-      });
-      process.exit(1);
+      const errorMessages = error.issues.map((err) => `${err.path.join(".")}: ${err.message}`).join("\n");
+      console.error("❌ Invalid environment variables:\n", errorMessages);
+
+      // Throwing instead of process.exit(1) is safer for serverless environments (Vercel)
+      // and allows Next.js to handle the error or log it properly during SSR/Actions.
+      throw new Error(`Invalid environment variables:\n${errorMessages}`);
     }
     throw error;
   }

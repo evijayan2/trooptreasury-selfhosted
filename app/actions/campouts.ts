@@ -15,8 +15,12 @@ const campoutSchema = z.object({
     location: z.string().min(1, "Location is required"),
     startDate: z.string(),
     endDate: z.string(),
+    description: z.string().optional(),
+    scoutLimit: z.string().optional(),
+    adultLimit: z.string().optional(),
     costEstimate: z.string().refine((val) => !isNaN(Number(val)) && Number(val) >= 0, "Cost must be a positive number"),
 })
+
 
 export async function createCampout(prevState: any, formData: FormData) {
     const slug = "troop-1"
@@ -30,8 +34,12 @@ export async function createCampout(prevState: any, formData: FormData) {
             location: formData.get("location"),
             startDate: formData.get("startDate"),
             endDate: formData.get("endDate"),
+            description: formData.get("description"),
+            scoutLimit: formData.get("scoutLimit"),
+            adultLimit: formData.get("adultLimit"),
             costEstimate: formData.get("costEstimate"),
         }
+
 
         const validatedFields = campoutSchema.safeParse(rawData)
 
@@ -39,22 +47,23 @@ export async function createCampout(prevState: any, formData: FormData) {
             return { error: "Invalid fields", issues: validatedFields.error.flatten() }
         }
 
-        const { name, location, startDate, endDate, costEstimate } = validatedFields.data
-
-        console.log("Creating Campout with data:", { name, location, startDate, endDate, costEstimate })
-        console.log("Explicitly setting status to:", CampoutStatus.DRAFT)
+        const { name, location, startDate, endDate, costEstimate, description, scoutLimit, adultLimit } = validatedFields.data
 
         const newCampout = await prisma.campout.create({
             data: {
                 troopId: troop.id,
                 name,
                 location,
+                description,
                 startDate: new Date(startDate),
                 endDate: new Date(endDate),
+                scoutLimit: scoutLimit ? parseInt(scoutLimit) : null,
+                adultLimit: adultLimit ? parseInt(adultLimit) : null,
                 estimatedCost: new Decimal(costEstimate),
                 status: CampoutStatus.DRAFT,
             }
         })
+
         console.log("Campout created:", newCampout)
 
         revalidatePath(`/dashboard/campouts`)

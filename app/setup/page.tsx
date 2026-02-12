@@ -5,9 +5,8 @@ import { redirect } from "next/navigation"
 export const dynamic = 'force-dynamic'
 
 export default async function Page() {
-    const userCount = await prisma.user.count()
-
-    if (userCount > 0) {
+    const troopCount = await prisma.troop.count()
+    if (troopCount > 0) {
         redirect("/")
     }
 

@@ -10,6 +10,7 @@ import { AuthError } from "next-auth"
 import { Decimal } from "decimal.js"
 import { isTroopAdmin, canManageFinances, canManageExpense, getTroopContext, checkTroopPermission } from "@/lib/auth-helpers"
 import { revalidatePath } from "next/cache"
+import { createNotification } from "./actions/notifications"
 
 
 // Initialize Resend (requires env var RESEND_API_KEY)
@@ -286,12 +287,15 @@ export async function authenticate(
             return `Too many login attempts. Please try again in ${Math.ceil(resetTime / 60)} minutes.`
         }
 
+        console.log(`[AUTH-DEBUG] authenticate action called for ${email}`)
+
         // Explicitly pass credentials and redirectTo
         await signIn("credentials", {
             email,
             password,
             redirectTo: "/dashboard"
         })
+        console.log(`[AUTH-DEBUG] signIn call returned (should have redirected)`)
 
     } catch (error: any) {
         if (error instanceof AuthError) {
@@ -518,7 +522,10 @@ export async function createScout(prevState: any, formData: FormData) {
 export async function registerScoutForCampout(campoutId: string, scoutId: string, slug?: string) {
     const session = await auth()
     if (!session) return { error: "Unauthorized" }
+    return internal_registerScoutForCampout(campoutId, scoutId, session.user.id, slug)
+}
 
+export async function internal_registerScoutForCampout(campoutId: string, scoutId: string, userId: string, slug?: string) {
     const campout = await prisma.campout.findUnique({ where: { id: campoutId } })
     if (!campout) return { error: "Campout not found" }
 
@@ -527,7 +534,7 @@ export async function registerScoutForCampout(campoutId: string, scoutId: string
         where: {
             troopId_userId: {
                 troopId: campout.troopId,
-                userId: session.user.id
+                userId
             }
         }
     })
@@ -538,14 +545,14 @@ export async function registerScoutForCampout(campoutId: string, scoutId: string
         const isLinked = await prisma.parentScout.findUnique({
             where: {
                 parentId_scoutId: {
-                    parentId: session.user.id,
+                    parentId: userId,
                     scoutId: scoutId
                 }
             }
         })
         if (!isLinked) return { error: "Unauthorized: You can only register your own scouts." }
     } else if (userRole === "SCOUT") {
-        const linkedScout = await prisma.scout.findUnique({ where: { userId: session.user.id } })
+        const linkedScout = await prisma.scout.findUnique({ where: { userId } })
         if (!linkedScout || linkedScout.id !== scoutId) {
             return { error: "Unauthorized: You can only register yourself." }
         }
@@ -554,23 +561,43 @@ export async function registerScoutForCampout(campoutId: string, scoutId: string
     }
 
     try {
-        await prisma.campoutScout.create({
-            data: {
-                campoutId,
-                scoutId,
+        const result = await prisma.$transaction(async (tx) => {
+            // Check Limits
+            const registeredCount = await tx.campoutScout.count({
+                where: {
+                    campoutId,
+                    status: "RESERVED"
+                }
+            })
+
+            let status: "RESERVED" | "WAITLISTED" = "RESERVED"
+            if (campout.scoutLimit && registeredCount >= campout.scoutLimit) {
+                status = "WAITLISTED"
             }
+
+            await tx.campoutScout.create({
+                data: {
+                    campoutId,
+                    scoutId,
+                    status
+                }
+            })
+            return status
         })
+
         if (slug) {
-            revalidatePath(`/dashboard/campouts/${campoutId}`)
+            try { revalidatePath(`/dashboard/campouts/${campoutId}`) } catch { }
         } else {
-            revalidatePath(`/dashboard/campouts/${campoutId}`)
+            try { revalidatePath(`/dashboard/campouts/${campoutId}`) } catch { }
         }
-        return { success: true, message: "Scout registered" }
+        return { success: true, message: result === "WAITLISTED" ? "Scout added to waitlist" : "Scout registered" }
     } catch (error) {
         console.error("Registration Error:", error)
         return { error: "Failed to register scout (may already be registered)" }
     }
 }
+
+
 
 export async function registerAdultForCampout(campoutId: string, adultId: string, slug?: string) {
     const session = await auth()
@@ -596,44 +623,85 @@ export async function registerAdultForCampout(campoutId: string, adultId: string
     }
 
     try {
-        await prisma.campoutAdult.create({
-            data: {
-                campoutId,
-                adultId,
-                role: "ATTENDEE"
+        const result = await prisma.$transaction(async (tx) => {
+            const registeredCount = await tx.campoutAdult.count({
+                where: {
+                    campoutId,
+                    role: "ATTENDEE",
+                    status: "RESERVED"
+                }
+            })
+
+            let status: "RESERVED" | "WAITLISTED" = "RESERVED"
+            if (campout.adultLimit && registeredCount >= campout.adultLimit) {
+                status = "WAITLISTED"
             }
+
+            await tx.campoutAdult.create({
+                data: {
+                    campoutId,
+                    adultId,
+                    role: "ATTENDEE",
+                    status
+                }
+            })
+            return status
         })
+
         if (slug) {
             revalidatePath(`/dashboard/campouts/${campoutId}`)
         } else {
             revalidatePath(`/dashboard/campouts/${campoutId}`)
         }
-        return { success: true, message: "Adult registered successfully" }
+        return { success: true, message: result === "WAITLISTED" ? "Adult added to waitlist" : "Adult registered successfully" }
     } catch (error) {
         console.error("Register Adult Error:", error)
         return { error: "Failed to register adult (may already be registered)" }
     }
 }
 
+
 export async function joinCampoutAsAdult(campoutId: string, slug: string) {
     const session = await auth()
     if (!session) return { error: "Unauthorized" }
 
+    const campout = await prisma.campout.findUnique({ where: { id: campoutId } })
+    if (!campout) return { error: "Campout not found" }
+
     try {
-        await prisma.campoutAdult.create({
-            data: {
-                campoutId,
-                adultId: session.user.id,
-                role: "ATTENDEE"
+        const result = await prisma.$transaction(async (tx) => {
+            const registeredCount = await tx.campoutAdult.count({
+                where: {
+                    campoutId,
+                    role: "ATTENDEE",
+                    status: "RESERVED"
+                }
+            })
+
+            let status: "RESERVED" | "WAITLISTED" = "RESERVED"
+            if (campout.adultLimit && registeredCount >= campout.adultLimit) {
+                status = "WAITLISTED"
             }
+
+            await tx.campoutAdult.create({
+                data: {
+                    campoutId,
+                    adultId: session.user.id,
+                    role: "ATTENDEE",
+                    status
+                }
+            })
+            return status
         })
+
         revalidatePath(`/dashboard/campouts/${campoutId}`)
-        return { success: true, message: "Joined as adult successfully" }
+        return { success: true, message: result === "WAITLISTED" ? "You have been added to the waitlist" : "Joined as adult successfully" }
     } catch (error) {
         console.error("Join Adult Error:", error)
         return { error: "Failed to join (may already be registered)" }
     }
 }
+
 
 const changePasswordSchema = z.object({
     currentPassword: z.string().min(1, "Current password is required"),
@@ -711,8 +779,8 @@ const setupAdminSchema = z.object({
 
 export async function setupInitialAdmin(prevState: any, formData: FormData) {
     try {
-        const userCount = await prisma.user.count()
-        if (userCount > 0) {
+        const troopCount = await prisma.troop.count()
+        if (troopCount > 0) {
             return { error: "Setup already completed. Please login." }
         }
 
@@ -729,12 +797,13 @@ export async function setupInitialAdmin(prevState: any, formData: FormData) {
         }
 
         const { email, name, password } = validatedFields.data
+        const lowercaseEmail = email.toLowerCase()
         const hashedPassword = await bcrypt.hash(password, 10)
 
         // Create User (No Role)
         const user = await prisma.user.create({
             data: {
-                email,
+                email: lowercaseEmail,
                 name,
                 passwordHash: hashedPassword,
                 // role: "ADMIN", // Removed
@@ -1863,7 +1932,7 @@ export async function removeAdultFromCampout(campoutId: string, adultId: string)
     // Get campout to find troopId
     const campout = await prisma.campout.findUnique({
         where: { id: campoutId },
-        select: { troopId: true }
+        select: { troopId: true, name: true, adultLimit: true } // Need name for notification
     })
     if (!campout) return { error: "Campout not found" }
 
@@ -1873,40 +1942,53 @@ export async function removeAdultFromCampout(campoutId: string, adultId: string)
     }
 
     try {
-        await prisma.campoutAdult.deleteMany({
-            where: {
-                campoutId,
-                adultId
-            }
-        })
-        revalidatePath(`/dashboard/campouts/${campoutId}`)
-        return { success: true }
-    } catch (e: any) {
-        return { error: e.message }
-    }
-}
+        await prisma.$transaction(async (tx) => {
+            const existingRecord = await tx.campoutAdult.findFirst({
+                where: { campoutId, adultId }
+            })
 
-export async function removeScoutFromCampout(campoutId: string, scoutId: string) {
-    const session = await auth()
-    if (!session) return { error: "Unauthorized" }
-    // Get campout to find troopId
-    const campout = await prisma.campout.findUnique({
-        where: { id: campoutId },
-        select: { troopId: true }
-    })
-    if (!campout) return { error: "Campout not found" }
-
-    const canManage = await canManageFinances(session.user.id, campout.troopId)
-    if (!canManage) {
-        return { error: "Unauthorized - Admin, Financier, or Leader role required" }
-    }
-
-    try {
-        await prisma.campoutScout.delete({
-            where: {
-                campoutId_scoutId: {
+            await tx.campoutAdult.deleteMany({
+                where: {
                     campoutId,
-                    scoutId
+                    adultId
+                }
+            })
+
+            // If the person removed was RESERVED, promote someone from waitlist
+            if (existingRecord && existingRecord.status === "RESERVED") {
+                const nextOnWaitlist = await tx.campoutAdult.findFirst({
+                    where: {
+                        campoutId,
+                        status: "WAITLISTED",
+                        role: "ATTENDEE"
+                    },
+                    orderBy: { createdAt: 'asc' }
+                })
+
+                if (nextOnWaitlist) {
+                    await tx.campoutAdult.update({
+                        where: {
+                            campoutId_adultId_role: {
+                                campoutId,
+                                adultId: nextOnWaitlist.adultId,
+                                role: nextOnWaitlist.role
+                            }
+                        },
+                        data: { status: "RESERVED" }
+                    })
+                    // Create Notification
+                    // We need slug for the link. Using troopId isn't enough, we need to fetch troop slug or assume context.
+                    // Let's resolve slug from troopId
+                    const troop = await tx.troop.findUnique({ where: { id: campout.troopId } })
+                    if (troop) {
+                        await createNotification({
+                            userId: nextOnWaitlist.adultId,
+                            title: "You're off the waitlist!",
+                            message: `A spot opened up for ${campout.name} and you have been added to the roster.`,
+                            type: "INFO",
+                            link: `/dashboard/campouts/${campoutId}`
+                        })
+                    }
                 }
             }
         })
@@ -1916,6 +1998,114 @@ export async function removeScoutFromCampout(campoutId: string, scoutId: string)
         return { error: e.message }
     }
 }
+
+
+export async function removeScoutFromCampout(campoutId: string, scoutId: string) {
+    const session = await auth()
+    if (!session) return { error: "Unauthorized" }
+    return internal_removeScoutFromCampout(campoutId, scoutId, session.user.id)
+}
+
+export async function internal_removeScoutFromCampout(campoutId: string, scoutId: string, userId: string) {
+    // Get campout to find troopId
+    const campout = await prisma.campout.findUnique({
+        where: { id: campoutId },
+        select: { troopId: true, name: true, scoutLimit: true } // Need name for notification
+    })
+    if (!campout) return { error: "Campout not found" }
+
+    const canManage = await canManageFinances(userId, campout.troopId)
+    if (!canManage) {
+        return { error: "Unauthorized - Admin, Financier, or Leader role required" }
+    }
+
+    try {
+        await prisma.$transaction(async (tx) => {
+            const existingRecord = await tx.campoutScout.findUnique({
+                where: {
+                    campoutId_scoutId: {
+                        campoutId,
+                        scoutId
+                    }
+                }
+            })
+
+            await tx.campoutScout.delete({
+                where: {
+                    campoutId_scoutId: {
+                        campoutId,
+                        scoutId
+                    }
+                }
+            })
+
+            // If the person removed was RESERVED, promote someone from waitlist
+            if (existingRecord && existingRecord.status === "RESERVED") {
+                const nextOnWaitlist = await tx.campoutScout.findFirst({
+                    where: {
+                        campoutId,
+                        status: "WAITLISTED"
+                    },
+                    orderBy: { registeredAt: 'asc' }, // Use registeredAt which doubles as creation time for scouts
+                    include: { scout: true }
+                })
+
+                if (nextOnWaitlist) {
+                    await tx.campoutScout.update({
+                        where: {
+                            campoutId_scoutId: {
+                                campoutId,
+                                scoutId: nextOnWaitlist.scoutId
+                            }
+                        },
+                        data: { status: "RESERVED" }
+                    })
+
+                    // Create Notification for Scout's Parents (and Scout if user linked)
+                    // 1. Get Parents
+                    const parents = await tx.parentScout.findMany({
+                        where: { scoutId: nextOnWaitlist.scoutId },
+                        select: { parentId: true }
+                    })
+
+                    const troop = await tx.troop.findUnique({ where: { id: campout.troopId } })
+
+                    if (troop) {
+                        const message = `${nextOnWaitlist.scout.name} is off the waitlist! A spot opened up for ${campout.name} and they have been added to the roster.`
+                        const link = `/dashboard/campouts/${campoutId}`
+
+                        // Notify Parents
+                        for (const p of parents) {
+                            await createNotification({
+                                userId: p.parentId,
+                                title: "Scout promoted from waitlist!",
+                                message,
+                                type: "INFO",
+                                link
+                            })
+                        }
+
+                        // Notify Scout Account if exists
+                        if (nextOnWaitlist.scout.userId) {
+                            await createNotification({
+                                userId: nextOnWaitlist.scout.userId,
+                                title: "You're off the waitlist!",
+                                message: `A spot opened up for ${campout.name} and you have been added to the roster.`,
+                                type: "INFO",
+                                link
+                            })
+                        }
+                    }
+                }
+            }
+        })
+        try { revalidatePath(`/dashboard/campouts/${campoutId}`) } catch { }
+        return { success: true }
+    } catch (e: any) {
+        return { error: e.message }
+    }
+}
+
 
 export async function logCampoutExpense(prevState: any, formData: FormData) {
     const session = await auth()
@@ -2785,3 +2975,135 @@ export async function processRefund(campoutId: string, entityId: string, entityT
         return { error: error.message || "Failed to process refund" }
     }
 }
+
+export async function promoteFromWaitlist(campoutId: string, id: string, type: 'SCOUT' | 'ADULT') {
+    const session = await auth()
+    if (!session) return { error: "Unauthorized" }
+    return internal_promoteFromWaitlist(campoutId, id, type, session.user.id)
+}
+
+export async function internal_promoteFromWaitlist(campoutId: string, id: string, type: 'SCOUT' | 'ADULT', userId: string) {
+    const campout = await prisma.campout.findUnique({
+        where: { id: campoutId },
+        select: { troopId: true, name: true }
+    })
+    if (!campout) return { error: "Campout not found" }
+
+    const canManage = await canManageFinances(userId, campout.troopId)
+    if (!canManage) {
+        return { error: "Unauthorized - Admin, Financier, or Leader role required" }
+    }
+
+    try {
+        await prisma.$transaction(async (tx) => {
+            if (type === 'SCOUT') {
+                await tx.campoutScout.update({
+                    where: { campoutId_scoutId: { campoutId, scoutId: id } },
+                    data: { status: "RESERVED" }
+                })
+
+                // Notify
+                const scout = await tx.scout.findUnique({ where: { id } })
+                if (scout) {
+                    const parents = await tx.parentScout.findMany({
+                        where: { scoutId: id },
+                        select: { parentId: true }
+                    })
+                    const troop = await tx.troop.findUnique({ where: { id: campout.troopId } })
+
+                    if (troop) {
+                        const message = `${scout.name} has been manually promoted to the reserved list for ${campout.name}.`
+                        const link = `/dashboard/campouts/${campoutId}`
+
+                        for (const p of parents) {
+                            await createNotification({
+                                userId: p.parentId,
+                                title: "Scout promoted!",
+                                message,
+                                type: "INFO",
+                                link
+                            })
+                        }
+                        if (scout.userId) {
+                            await createNotification({
+                                userId: scout.userId,
+                                title: "You've been promoted!",
+                                message: `You have been manually promoted to the reserved list for ${campout.name}.`,
+                                type: "INFO",
+                                link
+                            })
+                        }
+                    }
+                }
+
+            } else {
+                const adultRecord = await tx.campoutAdult.findFirst({
+                    where: { campoutId, adultId: id, role: "ATTENDEE" }
+                })
+
+                if (adultRecord) {
+                    await tx.campoutAdult.update({
+                        where: { campoutId_adultId_role: { campoutId, adultId: id, role: "ATTENDEE" } },
+                        data: { status: "RESERVED" }
+                    })
+
+                    // Notify
+                    const troop = await tx.troop.findUnique({ where: { id: campout.troopId } })
+                    if (troop) {
+                        await createNotification({
+                            userId: id,
+                            title: "You've been promoted!",
+                            message: `You have been manually promoted to the reserved list for ${campout.name}.`,
+                            type: "INFO",
+                            link: `/dashboard/campouts/${campoutId}`
+                        })
+                    }
+                }
+            }
+        })
+
+        try { revalidatePath(`/dashboard/campouts/${campoutId}`) } catch { }
+        return { success: true, message: "Participant promoted to reserved list" }
+    } catch (e: any) {
+        return { error: e.message }
+    }
+}
+
+export async function demoteToWaitlist(campoutId: string, id: string, type: 'SCOUT' | 'ADULT') {
+    const session = await auth()
+    if (!session) return { error: "Unauthorized" }
+    return internal_demoteToWaitlist(campoutId, id, type, session.user.id)
+}
+
+export async function internal_demoteToWaitlist(campoutId: string, id: string, type: 'SCOUT' | 'ADULT', userId: string) {
+    const campout = await prisma.campout.findUnique({
+        where: { id: campoutId },
+        select: { troopId: true }
+    })
+    if (!campout) return { error: "Campout not found" }
+
+    const canManage = await canManageFinances(userId, campout.troopId)
+    if (!canManage) {
+        return { error: "Unauthorized - Admin, Financier, or Leader role required" }
+    }
+
+    try {
+        if (type === 'SCOUT') {
+            await prisma.campoutScout.update({
+                where: { campoutId_scoutId: { campoutId, scoutId: id } },
+                data: { status: "WAITLISTED" }
+            })
+        } else {
+            await prisma.campoutAdult.update({
+                where: { campoutId_adultId_role: { campoutId, adultId: id, role: "ATTENDEE" } },
+                data: { status: "WAITLISTED" }
+            })
+        }
+
+        try { revalidatePath(`/dashboard/campouts/${campoutId}`) } catch { }
+        return { success: true, message: "Participant moved to waitlist" }
+    } catch (e: any) {
+        return { error: e.message }
+    }
+}
+

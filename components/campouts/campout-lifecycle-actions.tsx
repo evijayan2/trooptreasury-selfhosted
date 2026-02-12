@@ -4,6 +4,7 @@ import { useState } from "react"
 import { publishCampout, openCampoutPayments, deleteCampout } from "@/app/actions/campouts"
 import { Button } from "@/components/ui/button"
 import { CheckCircle, Megaphone, Trash2, AlertTriangle, Loader2 } from "lucide-react"
+import { cn } from "@/lib/utils"
 import {
     AlertDialog,
     AlertDialogAction,
@@ -23,9 +24,10 @@ interface CampoutLifecycleProps {
     slug: string
     status: "DRAFT" | "OPEN" | "READY_FOR_PAYMENT" | "CLOSED"
     campoutName: string
+    className?: string
 }
 
-export function CampoutLifecycleActions({ campoutId, slug, status, campoutName }: CampoutLifecycleProps) {
+export function CampoutLifecycleActions({ campoutId, slug, status, campoutName, className }: CampoutLifecycleProps) {
     const [loading, setLoading] = useState<string | null>(null)
     const router = useRouter()
 
@@ -60,7 +62,7 @@ export function CampoutLifecycleActions({ campoutId, slug, status, campoutName }
 
     if (status === "DRAFT") {
         return (
-            <div className="flex gap-2">
+            <div className={cn("flex gap-2", className)}>
                 <AlertDialog>
                     <AlertDialogTrigger asChild>
                         <Button variant="default" disabled={!!loading}>
@@ -110,7 +112,7 @@ export function CampoutLifecycleActions({ campoutId, slug, status, campoutName }
         return (
             <AlertDialog>
                 <AlertDialogTrigger asChild>
-                    <Button variant="default" className="bg-green-600 hover:bg-green-700" disabled={!!loading}>
+                    <Button variant="default" className={cn("bg-green-600 hover:bg-green-700", className)} disabled={!!loading}>
                         {loading === "open_payments" ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle className="w-4 h-4 mr-2" />}
                         Finalize & Open Payments
                     </Button>

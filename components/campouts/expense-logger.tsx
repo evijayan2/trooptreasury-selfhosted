@@ -25,6 +25,7 @@ import {
     TooltipContent,
     TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { cn } from "@/lib/utils"
 
 export function ExpenseLogger({
     campoutId,
@@ -32,7 +33,8 @@ export function ExpenseLogger({
     allAdults = [],
     currentUserId,
     userRole,
-    isOrganizer = false
+    isOrganizer = false,
+    className
 }: {
     campoutId: string
     adults?: any[]
@@ -40,6 +42,7 @@ export function ExpenseLogger({
     currentUserId?: string
     userRole?: string
     isOrganizer?: boolean
+    className?: string
 }) {
     const [open, setOpen] = useState(false)
     const [error, setError] = useState("")
@@ -82,7 +85,7 @@ export function ExpenseLogger({
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <div>
+                <div className={className}>
                     <Tooltip>
                         <TooltipTrigger asChild>
                             <Button variant="outline" size="sm"><Plus className="w-4 h-4 mr-2" /> Log Expense</Button>

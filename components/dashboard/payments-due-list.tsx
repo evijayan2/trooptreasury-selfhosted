@@ -71,8 +71,11 @@ export async function PaymentsDueList({ userId, slug }: { userId: string, slug: 
 
         // Check Linked Scouts
         for (const link of parentLinks) {
-            const isAttending = campout.scouts.some(s => s.scoutId === link.scout.id)
-            if (isAttending) {
+            // Find the specific scout record in this campout to check status
+            const scoutInCampout = campout.scouts.find(s => s.scoutId === link.scout.id)
+
+            // Only proceed if they are attending AND not waitlisted
+            if (scoutInCampout && scoutInCampout.status !== 'WAITLISTED') {
                 const paidAmount = campout.transactions
                     .filter(t =>
                         (["CAMP_TRANSFER", "EVENT_PAYMENT"].includes(t.type) || t.type.startsWith("TROOP")) &&
@@ -95,7 +98,7 @@ export async function PaymentsDueList({ userId, slug }: { userId: string, slug: 
 
         // Check Parent (Adult)
         const userAttendee = campout.adults.find(a => a.adultId === userId && a.role === "ATTENDEE")
-        if (userAttendee) {
+        if (userAttendee && userAttendee.status !== 'WAITLISTED') {
             const paidAmount = campout.transactions
                 .filter(t =>
                     (["REGISTRATION_INCOME", "CAMP_TRANSFER", "EVENT_PAYMENT"].includes(t.type) || t.type.startsWith("TROOP")) &&

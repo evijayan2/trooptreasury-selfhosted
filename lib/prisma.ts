@@ -3,8 +3,10 @@ import { PrismaClient } from "@prisma/client"
 import { Pool } from 'pg'
 import { PrismaPg } from '@prisma/adapter-pg'
 
-const globalForPrisma = globalThis as unknown as { prisma: PrismaClient }
-
+const globalForPrisma = globalThis as unknown as {
+    prisma: PrismaClient | undefined,
+    pool: Pool | undefined
+}
 
 const getConnectionString = () => {
     // Prioritize VERCEL_ENV as it distinguishes between 'production' and 'preview' deployments
@@ -31,16 +33,34 @@ const getConnectionString = () => {
     return process.env.DATABASE_URL || process.env.POSTGRES_PRISMA_URL
 }
 
-const connectionString = getConnectionString()
-const pool = new Pool({ connectionString })
-const adapter = new PrismaPg(pool)
+function createPrismaClient() {
+    const connectionString = getConnectionString()
 
+    // Shelter the pool to prevent leakage during hot reloads
+    const pool = globalForPrisma.pool || new Pool({
+        connectionString,
+        max: 10, // Slightly lower max to be pooler-friendly
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 10000, // Wait longer for TLS
+        ssl: connectionString?.includes('sslmode=require') ? {
+            rejectUnauthorized: false
+        } : false
+    })
 
-console.log("Initializing Prisma Client... adapter-pg")
-// Triggering client reload
-export const prisma = globalForPrisma.prisma || new PrismaClient({ adapter })
+    if (process.env.NODE_ENV !== "production") {
+        globalForPrisma.pool = pool
+    }
+
+    const adapter = new PrismaPg(pool)
+
+    return new PrismaClient({
+        adapter,
+        log: process.env.NODE_ENV === "development" ? ["query", "error", "warn"] : ["error"],
+    })
+}
+
+export const prisma = globalForPrisma.prisma || createPrismaClient()
 
 if (process.env.NODE_ENV !== "production") {
-    console.log("Saving prisma to globalThis")
     globalForPrisma.prisma = prisma
 }

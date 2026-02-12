@@ -6,6 +6,7 @@ import { payoutOrganizers } from "@/app/actions"
 import { closeCampout } from "@/app/actions/campouts"
 import { toast } from "sonner"
 import { Loader2, CircleDollarSign, Lock } from "lucide-react"
+import { cn } from "@/lib/utils"
 import {
     Dialog,
     DialogContent,
@@ -30,12 +31,14 @@ export function PayoutControls({
     campoutId,
     status,
     slug,
-    organizers = []
+    organizers = [],
+    className
 }: {
     campoutId: string,
     status: string,
     slug: string,
-    organizers?: OrganizerPayout[]
+    organizers?: OrganizerPayout[],
+    className?: string
 }) {
     const [loading, setLoading] = useState<string | null>(null)
     const [confirmAction, setConfirmAction] = useState<PayoutAction | null>(null)
@@ -103,7 +106,7 @@ export function PayoutControls({
 
     return (
         <>
-            <div className="flex flex-wrap gap-2">
+            <div className={cn("flex flex-wrap gap-2", className)}>
 
 
                 <Button

@@ -1,10 +1,10 @@
 "use client"
 
-import { useState, useEffect } from 'react'
 import { updatePushToken } from '@/app/actions/user'
+import { Button } from '@/components/ui/button'
 import { NEXT_PUBLIC_VAPID_PUBLIC_KEY } from '@/lib/push-config'
 import { Bell } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 function urlBase64ToUint8Array(base64String: string) {
@@ -66,7 +66,26 @@ export function PushNotificationManager() {
         }
     }
 
-    if (!isSupported) {
+    useEffect(() => {
+        const handleMessage = async (event: MessageEvent) => {
+            try {
+                const data = JSON.parse(event.data)
+                if (data.type === 'PUSH_TOKEN' && data.token) {
+                    console.log("Received push token from mobile app:", data.token)
+                    await updatePushToken(data.token)
+                    // If we have a subscription object, we should probably clear it or keep it as is
+                    // since we're now using a mobile token instead of a web push subscription.
+                }
+            } catch (e) {
+                // Not a JSON message or not for us, skip
+            }
+        }
+
+        window.addEventListener('message', handleMessage)
+        return () => window.removeEventListener('message', handleMessage)
+    }, [])
+
+    if (!isSupported && !subscription) {
         return null // or return <p>Push notifications not supported</p>
     }
 

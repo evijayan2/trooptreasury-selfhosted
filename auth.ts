@@ -19,13 +19,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             },
             authorize: async (credentials) => {
                 try {
+                    const emailInput = (credentials?.email as string || '').trim().toLowerCase()
+                    const passwordInput = (credentials?.password as string || '').trim()
+
+                    console.log(`[AUTH-DEBUG] Authorize called for email: "${emailInput}"`)
 
                     const parsedCredentials = z
-                        .object({ email: z.string().refine(val => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val), "Invalid email"), password: z.string().min(1) })
-                        .safeParse(credentials)
+                        .object({
+                            email: z.string().email("Invalid email format"),
+                            password: z.string().min(1)
+                        })
+                        .safeParse({ email: emailInput, password: passwordInput })
 
                     if (!parsedCredentials.success) {
-
+                        console.log(`[AUTH-DEBUG] Credential validation failed:`, parsedCredentials.error.flatten())
                         return null
                     }
 

@@ -55,7 +55,8 @@ export async function registerTroop(data: z.infer<typeof registerSchema>) {
             return { success: false, error: "Troop URL identifier is currently reserved." }
         }
 
-        const emailExists = await prisma.user.findUnique({ where: { email: adminEmail } })
+        const lowercaseEmail = adminEmail.toLowerCase()
+        const emailExists = await prisma.user.findUnique({ where: { email: lowercaseEmail } })
 
         // If email exists and user hasn't confirmed, require confirmation
         if (emailExists && !validated.data.confirmMultipleTroops) {
@@ -73,6 +74,7 @@ export async function registerTroop(data: z.infer<typeof registerSchema>) {
         const result = await prisma.$transaction(async (tx) => {
             let user;
 
+            const lowercaseEmail = adminEmail.toLowerCase()
             if (emailExists) {
                 // Update existing user with new password
                 user = await tx.user.update({
@@ -87,7 +89,7 @@ export async function registerTroop(data: z.infer<typeof registerSchema>) {
                 user = await tx.user.create({
                     data: {
                         name: adminName,
-                        email: adminEmail,
+                        email: lowercaseEmail,
                         passwordHash: hashedPassword,
                         isActive: true
                     }

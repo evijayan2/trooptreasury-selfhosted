@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "prisma generate && node scripts/db-migrate.js && next build",
-    "start": "next start",
+    "dev": "set HOME=%USERPROFILE% && next dev",
+    "build": "set HOME=%USERPROFILE% && prisma generate && node scripts/db-migrate.js && next build",
+    "start": "set HOME=%USERPROFILE% && next start",
     "lint": "eslint",
     "db:backup": "node scripts/backup-database.js",
     "db:restore": "node scripts/restore-database.js",
