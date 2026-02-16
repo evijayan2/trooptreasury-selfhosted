@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import clsx from "clsx"
-import { Users, Home, TrendingUp, Tent, FileText, Settings, DollarSign, ShoppingBag, CreditCard } from "lucide-react"
+import { Users, Home, TrendingUp, Tent, FileText, Settings, DollarSign, ShoppingBag, CreditCard, Award } from "lucide-react"
 import { Permission } from "@/lib/rbac"
 import { Role } from "@prisma/client"
 
@@ -32,6 +32,7 @@ export function NavLinks({ role, permissions, scoutId, slug, onNavigate }: NavLi
         { name: 'Campouts', href: `${baseUrl}/campouts`, icon: Tent, permission: 'VIEW_CAMPOUTS' },
         { name: 'My Fundraising', href: `${baseUrl}/my-fundraising`, icon: ShoppingBag, permission: 'VIEW_FUNDRAISING' },
         { name: 'Reports', href: `${baseUrl}/reports`, icon: FileText, permission: 'VIEW_REPORTS' },
+        { name: 'Eagle Project', href: `${baseUrl}/eagle`, icon: Award, permission: 'VIEW_SCOUTS' }, // Using VIEW_SCOUTS as proxy or custom logic
         { name: 'Users', href: `${baseUrl}/users`, icon: Users, permission: 'VIEW_USERS' },
         { name: 'Settings', href: `${baseUrl}/settings`, icon: Settings, permission: 'VIEW_SETTINGS' },
         { name: 'Billing', href: `/dashboard/admin/billing`, icon: CreditCard, permission: 'VIEW_BILLING' },

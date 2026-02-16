@@ -6,11 +6,15 @@ Now with **Multi-Tenant Support** for managing multiple troops on a single insta
 ## Features
 
 - **Multi-Tenant Architecture**: Each troop gets a dedicated workspace (`/dashboardtroop-slug/...`) with isolated data.
-- **Financial Management**: Track IBA balances, campout costs, and troop transactions.
-- **Fundraising**: Support for campaigns and product sales with automatic profit calculations.
-- **Role-Based Access Control**: Granular permissions (Admin, Financier, Leader, Scout, Parent).
+- **Financial Management**: Track IBA balances, campout costs, and troop transactions with detailed accounting.
+- **Eagle Scout Projects**: Complete management lifecycle for Eagle Scout projects, including financial tracking and volunteer logs.
+- **Volunteer Management**: QR code-based check-in/out system for tracking service hours and automated calculations.
+- **Campout Planning**: Logistics, cost management, and attendance tracking for troop outings.
+- **Fundraising Suite**: Support for campaigns and product sales with automatic profit calculations and IBA integration.
+- **Scout & Parent Portal**: Dedicated mobile-friendly views for scouts to track their rank progress, service hours, and financials.
+- **Role-Based Access Control**: Granular permissions (Admin, Financier, Leader, Scout, Parent, Guest).
 - **Subscription Management** (Hosted Mode): Built-in specialized billing, lifecycle states (Pause/Resume/Grace Period), and Stripe integration.
-- **Data Portability**: Full ZIP export of troop data.
+- **Data Portability**: Full ZIP export of troop data for transparency and backups.
 
 ## Deployment Modes
 

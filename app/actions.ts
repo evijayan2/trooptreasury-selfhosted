@@ -233,7 +233,6 @@ export async function acceptInvitation(prevState: any, formData: FormData) {
     }
 
     const { token, password } = validatedFields.data
-    console.log(`[AUTH-DEBUG] acceptInvitation called with token: ${token}`);
 
     try {
         const user = await prisma.user.findUnique({
@@ -241,16 +240,13 @@ export async function acceptInvitation(prevState: any, formData: FormData) {
         })
 
         if (!user) {
-            console.log(`[AUTH-DEBUG] User NOT found for token: ${token}`);
             return { error: "Invalid or expired invitation token" }
         }
 
         if (!user.invitationExpires || user.invitationExpires < new Date()) {
-            console.log(`[AUTH-DEBUG] Token EXPIRED for user: ${user.email}, expires at: ${user.invitationExpires}`);
             return { error: "Invalid or expired invitation token" }
         }
 
-        console.log(`[AUTH-DEBUG] Token Valid for user: ${user.email}`);
 
         const hashedPassword = await bcrypt.hash(password, 10)
 
@@ -287,7 +283,6 @@ export async function authenticate(
             return `Too many login attempts. Please try again in ${Math.ceil(resetTime / 60)} minutes.`
         }
 
-        console.log(`[AUTH-DEBUG] authenticate action called for ${email}`)
 
         // Explicitly pass credentials and redirectTo
         await signIn("credentials", {
@@ -295,7 +290,6 @@ export async function authenticate(
             password,
             redirectTo: "/dashboard"
         })
-        console.log(`[AUTH-DEBUG] signIn call returned (should have redirected)`)
 
     } catch (error: any) {
         if (error instanceof AuthError) {

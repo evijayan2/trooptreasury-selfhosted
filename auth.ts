@@ -22,7 +22,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                     const emailInput = (credentials?.email as string || '').trim().toLowerCase()
                     const passwordInput = (credentials?.password as string || '').trim()
 
-                    console.log(`[AUTH-DEBUG] Authorize called for email: "${emailInput}"`)
 
                     const parsedCredentials = z
                         .object({
@@ -32,7 +31,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                         .safeParse({ email: emailInput, password: passwordInput })
 
                     if (!parsedCredentials.success) {
-                        console.log(`[AUTH-DEBUG] Credential validation failed:`, parsedCredentials.error.flatten())
                         return null
                     }
 
@@ -46,7 +44,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
 
                     if (!user) {
-                        console.log(`[AUTH-DEBUG] User not found in DB for email: "${lowercaseEmail}"`)
                         return null
                     }
 
@@ -60,7 +57,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
                     // Reset lock if expired
                     if (user.lockedUntil && user.lockedUntil <= new Date()) {
-                        console.log(`[AUTH-DEBUG] Lock expired, resetting...`);
                         await prisma.user.update({
                             where: { id: user.id },
                             data: {
@@ -71,7 +67,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                     }
 
                     if (!user.passwordHash) {
-                        console.log(`[AUTH-DEBUG] No password hash found for user`);
                         return null
                     }
 

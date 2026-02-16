@@ -139,6 +139,7 @@ model Scout {
   troop                Troop                       @relation(fields: [troopId], references: [id])
   user                 User?                       @relation(fields: [userId], references: [id])
   transactions         Transaction[]
+  eagleProjects        EagleProject[]
 }
 
 model ParentScout {
@@ -524,4 +525,74 @@ enum TroopStatus {
   PAUSED
   GRACE_PERIOD
   PENDING_DELETION
+}
+
+model EagleProject {
+  id          String   @id @default(uuid())
+  scoutId     String
+  title       String
+  description String?
+  beneficiary String?
+  status      EagleProjectStatus @default(OPEN)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  scout       Scout    @relation(fields: [scoutId], references: [id])
+  financials  EagleProjectFinancial[]
+  workDays    EagleProjectWorkDay[]
+}
+
+model EagleProjectFinancial {
+  id          String   @id @default(uuid())
+  projectId   String
+  type        EagleFinancialType
+  amount      Decimal  @db.Decimal(10, 2)
+  description String
+  category    String?  // e.g., "Materials", "Supplies", "Tools"
+  date        DateTime @default(now())
+  
+  project     EagleProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model EagleProjectWorkDay {
+  id           String   @id @default(uuid())
+  projectId    String
+  date         DateTime
+  startTime    DateTime?
+  endTime      DateTime?
+  notes        String?
+  checkInToken String   @default(uuid())
+  
+  project      EagleProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  volunteers   EagleProjectVolunteer[]
+}
+
+model EagleProjectVolunteer {
+  id           String   @id @default(uuid())
+  workDayId    String
+  name         String   // Can be arbitrary for non-users
+  userId       String?  // Optional link to system user
+  hours        Decimal  @db.Decimal(5, 2)
+  role         EagleVolunteerRole @default(OTHER) // Scout, Adult, Other
+  checkInTime  DateTime?
+  checkOutTime DateTime?
+  
+  workDay      EagleProjectWorkDay @relation(fields: [workDayId], references: [id], onDelete: Cascade)
+}
+
+enum EagleProjectStatus {
+  OPEN
+  CLOSED
+}
+
+enum EagleFinancialType {
+  INCOME
+  EXPENSE
+}
+
+enum EagleVolunteerRole {
+  EAGLE_CANDIDATE
+  REGISTERED_SCOUT
+  REGISTERED_ADULT
+  OTHER
 }
